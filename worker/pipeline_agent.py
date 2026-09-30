@@ -10,6 +10,7 @@ from worker.coverage import proposal, workflows, validate_maintenance
 from worker.model import Model
 from worker.project import Unsupported
 from worker.security import redact, is_install_command
+from worker.submit import pending_maintenance
 
 
 class PipelineAgent(Agent):
@@ -41,19 +42,18 @@ class PipelineAgent(Agent):
                 root = Path(directory)
                 self.github.download(repo, sha, root)
                 if request["mode"] == "maintenance":
-                    prs = self.github.request(
-                        "GET", f"/repos/{repo}/pulls?state=open&head={repo.split('/')[0]}:codex/patchgoblin-maintenance"
-                    )
-                    if prs:
+                    pending_pr = pending_maintenance(self.github, repo, {**request, 'base_ref': self.state['base_ref']})
+                    if pending_pr:
                         from worker.coverage import MANAGED
                         import base64
 
                         pending = self.github.request(
-                            "GET", f"/repos/{repo}/contents/{MANAGED}?ref=codex/patchgoblin-maintenance"
+                            "GET", f"/repos/{repo}/contents/{MANAGED}?ref={pending_pr['head']['ref']}"
                         )
                         (root / MANAGED).parent.mkdir(parents=True, exist_ok=True)
                         (root / MANAGED).write_bytes(base64.b64decode(pending["content"]))
-                        self.state["maintenance_pr_sha"] = prs[0]["head"]["sha"]
+                        self.state["maintenance_pr_sha"] = pending_pr["head"]["sha"]
+                        self.state['maintenance_branch'] = pending_pr['head']['ref']
                 plan = proposal(root, request["mode"])
                 self.state["coverage"] = plan["coverage"]
                 self.state["evidence"] = [plan["reason"]]

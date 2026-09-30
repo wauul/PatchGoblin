@@ -9,7 +9,7 @@ const methods={
   sandbox=await Sandbox.create({idleTimeoutMinutes:3,networkIsolation:'ISOLATED'});
   process.stdout.write(JSON.stringify({event:'created',sandbox_id:sandbox.id})+'\n');
   // No env, domains, secrets, or environment private-network access on the VM.
-  for(const name of ['sandbox_rpc.py','sandbox.py','project.py','security.py','github.py','state_codec.py']){
+  for(const name of ['sandbox_rpc.py','sandbox.py','project.py','security.py','github.py','state_codec.py','node_manager.py']){
    await sandbox.files.write('/opt/patchgoblin/worker/'+name,await readFile(new URL('../worker/'+name,import.meta.url),'utf8'));
   }
   await sandbox.files.write('/opt/patchgoblin/worker/__init__.py','');

@@ -113,6 +113,8 @@ def process(delivery):
         with connect() as db:
             account = data.get("sender", {}).get("id")
             db.execute("DELETE FROM pg_sessions WHERE account_id=%s", (account,))
+            db.execute("UPDATE pg_accounts SET credentials=NULL,refresh_lease_until=NULL,token_expires_at=NULL,refresh_expires_at=NULL WHERE id=%s", (account,))
+            db.execute("UPDATE patchgoblin_jobs SET cancelled_at=now(),status='cancelled' WHERE account_id=%s AND status NOT IN ('submitted','verified','failed','unsupported','cancelled')", (account,))
             db.execute(
                 "UPDATE pg_repositories SET auto_repair=false,auto_builder=false,auto_maintenance=false WHERE controller_id=%s",
                 (account,),
@@ -276,9 +278,10 @@ def drain_deliveries():
             )
     except Exception as exc:
         busy = "PG_ACTIVE_JOB" in str(exc)
+        delay = max(15, getattr(exc,'retry_after',15))
         with connect() as db:
             db.execute(
-                "UPDATE pg_deliveries SET status=%s,available_at=now()+interval '15 seconds',lease_expires_at=NULL,error=%s WHERE id=%s",
-                ("pending" if row["attempts"] < (45 if busy else 3) else "failed", redact(str(exc))[:300], row["id"]),
+                "UPDATE pg_deliveries SET status=%s,available_at=now()+(%s * interval '1 second'),lease_expires_at=NULL,error=%s WHERE id=%s",
+                ("pending" if row["attempts"] < (45 if busy else 8 if hasattr(exc,'retry_after') else 3) else "failed", delay, redact(str(exc))[:300], row["id"]),
             )
     return True

@@ -10,6 +10,7 @@ __pycache__/
 *.tar.gz
 .sites-runtime/
 .local/
+web/public/__extension_verify/
 .vercel/
 .railway/*
 !.railway/railway.ts

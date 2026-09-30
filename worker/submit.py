@@ -5,6 +5,31 @@ from urllib.parse import quote
 from worker.security import safe_path, redact, LOCK_FILES, PATCH_FILES
 
 
+def maintenance_prefix(request):
+    review = request.get('review_pr')
+    return 'codex/patchgoblin-maintenance' + (f'-review-{int(review)}' if review else '')
+
+
+def pending_maintenance(github, repo, request):
+    """Find this App's open PR even after its original branch was closed."""
+    prefix = maintenance_prefix(request)
+    expected_author = os.getenv('GITHUB_APP_SLUG', 'patchgoblin-ci') + '[bot]'
+    candidates = []
+    for page in range(1, 4):
+        prs = github.request('GET', f'/repos/{repo}/pulls?state=open&per_page=100&page={page}')
+        for pr in prs:
+            branch = pr['head']['ref']
+            suffix = branch.removeprefix(prefix + '-')
+            matches = branch == prefix or (branch.startswith(prefix + '-') and suffix.isdigit())
+            if matches and pr['user']['login'] == expected_author and pr['base']['ref'] == request.get('base_ref', request.get('ref', 'main')):
+                candidates.append(pr)
+        if len(prs) < 100:
+            break
+    if len(candidates) > 1:
+        raise ValueError('Multiple maintenance PRs need manual reconciliation before another update')
+    return candidates[0] if candidates else None
+
+
 def submit(github, job_id, request, state, cancelled=lambda: False):
     files = state.get("patch", {})
     checks = state.get("verification", [])
@@ -31,7 +56,7 @@ def submit(github, job_id, request, state, cancelled=lambda: False):
     if source["sha"] != state["sha"]:
         raise ValueError("Base branch changed during verification. Start a new job against the current commit.")
     owner = repo.split("/")[0]
-    branch = "codex/patchgoblin-maintenance" if request["mode"] == "maintenance" else f"codex/patchgoblin-neon-{job_id}"
+    branch = state.get('maintenance_branch') or maintenance_prefix(request) if request["mode"] == "maintenance" else f"codex/patchgoblin-neon-{job_id}"
     existing = github.request("GET", prefix + f"/pulls?state=all&head={owner}:{branch}")
     if existing and request["mode"] != "maintenance":
         pr = existing[0]

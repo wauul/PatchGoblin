@@ -17,6 +17,7 @@ from worker.pipeline_agent import PipelineAgent
 from worker.webhooks import drain_deliveries
 
 DRAIN_LOCK = threading.Lock()
+DELIVERY_LOCK = threading.Lock()
 
 
 def cleanup():
@@ -156,6 +157,18 @@ def drain():
 def wake():
     if DRAIN_LOCK.acquire(blocking=False):
         threading.Thread(target=drain, daemon=True).start()
+    elif DELIVERY_LOCK.acquire(blocking=False):
+        # Reconcile signed events while sandbox work is running, so a newer push
+        # or revoked installation can cancel that work before submission.
+        def reconcile_pending():
+            try:
+                while drain_deliveries():
+                    pass
+            except Exception as exc:
+                print(json.dumps({'level':'error','message':redact(str(exc))[:1000]}), flush=True)
+            finally:
+                DELIVERY_LOCK.release()
+        threading.Thread(target=reconcile_pending, daemon=True).start()
 
 
 class Handler(BaseHTTPRequestHandler):

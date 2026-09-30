@@ -5,7 +5,8 @@ import os
 import time
 import jwt
 import httpx
-from worker.github import GitHub
+from worker.github import GitHub, rate_limit_delay, GitHubRateLimit
+from urllib.parse import unquote
 
 
 def app_jwt():
@@ -29,6 +30,9 @@ def app_request(method, path, body=None):
             },
             json=body,
         )
+    delay = rate_limit_delay(response)
+    if delay is not None:
+        raise GitHubRateLimit(delay)
     if response.status_code == 404:
         return None
     if not response.is_success:
@@ -59,6 +63,9 @@ class InstallationGitHub(GitHub):
         if time.monotonic() > self.expires:
             self.refresh()
         prefix = "/repos/" + self.repo
+        decoded = unquote(path.split('?',1)[0])
+        if any(p in {'.','..'} for p in decoded.split('/')) or '\\' in decoded:
+            raise ValueError('Installation request escaped its repository scope')
         if path.split("?", 1)[0] != prefix and not path.startswith(prefix + "/"):
             raise ValueError("Installation request escaped its repository scope")
         return super().request(method, path, **kwargs)

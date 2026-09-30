@@ -160,6 +160,14 @@ pid_filename /tmp/squid.pid
             if python.startswith("node:")
             else "[ -d .venv ] || python -m venv .venv; export PATH=$PWD/.venv/bin:$PATH; " + cmd
         )
+        if python.startswith('node:') and install and command.split()[0] in {'pnpm','yarn'}:
+            import json
+            from worker.node_manager import manager_version
+            manager = command.split()[0]
+            package = self.root / cwd / 'package.json'
+            declared = json.loads(package.read_text()).get('packageManager','') if package.exists() else ''
+            version = manager_version(manager, declared)
+            script = 'export COREPACK_ENABLE_AUTO_PIN=0 COREPACK_DEFAULT_TO_LATEST=0; corepack prepare ' + shlex.quote(manager+'@'+version) + ' --activate && ' + script
         args += [self.image, "sh", "-c", script]
         self.calls += 1
         start = time.monotonic()

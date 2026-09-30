@@ -115,3 +115,24 @@ def test_node_versions_are_selected_from_actual_constraints():
     assert node_runtime("^24.0.0") == "node:24"
     with pytest.raises(Unsupported):
         node_runtime(">=26")
+
+
+def test_declared_pnpm_version_is_preserved_in_proposal(tmp_path):
+    node_project(tmp_path)
+    package = json.loads((tmp_path/'package.json').read_text())
+    package['packageManager'] = 'pnpm@10.15.1'
+    (tmp_path/'package.json').write_text(json.dumps(package))
+    (tmp_path/'pnpm-lock.yaml').write_text('lockfileVersion: 9.0\n')
+    plan = proposal(tmp_path, 'builder')
+    assert plan['coverage']['requirements']['units'][0]['manager_version']=='10.15.1'
+    assert 'npm install --global pnpm@10.15.1' in next(iter(plan['files'].values()))
+
+
+def test_yarn_berry_reports_setup_boundary_instead_of_using_classic(tmp_path):
+    node_project(tmp_path)
+    package = json.loads((tmp_path/'package.json').read_text())
+    package['packageManager'] = 'yarn@4.9.2'
+    (tmp_path/'package.json').write_text(json.dumps(package))
+    (tmp_path/'yarn.lock').write_text('__metadata:\n  version: 8\n')
+    with pytest.raises(Unsupported, match='Yarn Berry'):
+        proposal(tmp_path,'builder')

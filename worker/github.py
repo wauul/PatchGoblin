@@ -10,6 +10,28 @@ from worker.state_codec import encode_state, decode_state
 MARKER = "<!-- patchgoblin-state-v1 -->\n"
 
 
+class GitHubRateLimit(RuntimeError):
+    def __init__(self, retry_after):
+        self.retry_after = retry_after
+        super().__init__(f'GitHub rate limit; retry after {retry_after} seconds')
+
+
+def rate_limit_delay(response):
+    limited = response.status_code == 429 or response.status_code == 403 and (
+        response.headers.get('x-ratelimit-remaining') == '0' or response.headers.get('retry-after') or
+        'secondary rate limit' in response.text.lower())
+    if not limited:
+        return None
+    try:
+        if response.headers.get('retry-after'):
+            return max(1, int(response.headers['retry-after']))
+        if response.headers.get('x-ratelimit-remaining') == '0':
+            return max(1, int(response.headers['x-ratelimit-reset']) - int(time.time()) + 1)
+    except (KeyError,ValueError):
+        pass
+    return 60
+
+
 class GitHub:
     def __init__(self, token=None):
         self.client = httpx.Client(
@@ -28,6 +50,9 @@ class GitHub:
         self.calls += 1
         for attempt in range(3):
             response = self.client.request(method, path, **kwargs)
+            delay = rate_limit_delay(response)
+            if delay is not None:
+                raise GitHubRateLimit(delay)
             if response.status_code not in {429, 502, 503}:
                 break
             time.sleep(2**attempt)

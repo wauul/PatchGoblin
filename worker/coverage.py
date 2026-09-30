@@ -10,6 +10,7 @@ import yaml
 from ruamel.yaml import YAML
 from worker.project import Unsupported, inspect as python_inspect
 from worker.security import safe_path
+from worker.node_manager import manager_version
 
 MANAGED = ".github/workflows/patchgoblin-maintenance.yml"
 SCRIPT_NAMES = {"test", "test:unit", "test:ci", "lint", "typecheck", "type-check", "check", "build"}
@@ -56,6 +57,8 @@ def detect(root: Path):
                 manager = root_manager or (
                     "pnpm" if (root / "pnpm-lock.yaml").exists() else "yarn" if (root / "yarn.lock").exists() else "npm"
                 )
+                declared = root_package.get('packageManager', '')
+            version = manager_version(manager, declared)
             lock = {"npm": "package-lock.json", "pnpm": "pnpm-lock.yaml", "yarn": "yarn.lock"}[manager]
             install_dir = root if workspace else folder
             if not (install_dir / lock).exists():
@@ -82,6 +85,7 @@ def detect(root: Path):
                     "path": path,
                     "language": "node",
                     "manager": manager,
+                    "manager_version": version,
                     "runtime": runtime,
                     "runtime_requirement": spec,
                     "install": {
@@ -326,7 +330,7 @@ def proposal(root, mode):
                     {
                         "name": "Install package manager",
                         "run": "npm install --global "
-                        + ("pnpm@9.15.9" if unit["manager"] == "pnpm" else "yarn@1.22.22"),
+                        + unit['manager'] + '@' + unit['manager_version'],
                     },
                 )
         else:
