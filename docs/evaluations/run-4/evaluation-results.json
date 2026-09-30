@@ -1,0 +1,297 @@
+{
+  "scope": "Local fixtures in real Docker sandboxes; no remote CI claim",
+  "cases": [
+    {
+      "id": "pip-conflict",
+      "expected": "verified",
+      "actual": "failed",
+      "oracle_pass": false,
+      "reproduction_success": true,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 156.49,
+      "metrics": {
+        "model_tokens": 4683,
+        "estimated_cost_usd": null,
+        "duration_seconds": 156.49,
+        "model": "qwen-coder-3b",
+        "model_calls": 3,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 12
+      },
+      "diagnosis": "Patch attempt budget exhausted",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 5.39,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "missing-dependency",
+      "expected": "verified",
+      "actual": "failed",
+      "oracle_pass": false,
+      "reproduction_success": true,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 163.8,
+      "metrics": {
+        "model_tokens": 7030,
+        "estimated_cost_usd": null,
+        "duration_seconds": 163.8,
+        "model": "qwen-coder-3b",
+        "model_calls": 3,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 14
+      },
+      "diagnosis": "Patch attempt budget exhausted",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 6.51,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "python-mismatch",
+      "expected": "verified",
+      "actual": "failed",
+      "oracle_pass": false,
+      "reproduction_success": true,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 177.26,
+      "metrics": {
+        "model_tokens": 3084,
+        "estimated_cost_usd": null,
+        "duration_seconds": 177.26,
+        "model": "qwen-coder-3b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 9
+      },
+      "diagnosis": "Unterminated string starting at: line 12 column 16 (char 760)",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 5.37,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "install-command",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": true,
+      "incorrect_repair": false,
+      "duration_seconds": 44.45,
+      "metrics": {
+        "model_tokens": 1201,
+        "estimated_cost_usd": null,
+        "duration_seconds": 43.7,
+        "model": "qwen-coder-3b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 9,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The error indicates that the `requirements.txt` file is not found or is empty, causing the `pip install` command to fail. The `pytest` package is specified in `requirements.txt`, but the `requests` package is not. This is likely due to a typo or missing package in the `requirements.txt` file.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 6.39,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "uv-lock-drift",
+      "expected": "verified",
+      "actual": "failed",
+      "oracle_pass": false,
+      "reproduction_success": true,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 143.46,
+      "metrics": {
+        "model_tokens": 5125,
+        "estimated_cost_usd": null,
+        "duration_seconds": 143.28,
+        "model": "qwen-coder-3b",
+        "model_calls": 3,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 11
+      },
+      "diagnosis": "Patch attempt budget exhausted",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 3.57,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "builder-pip",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 30.59,
+      "metrics": {
+        "model_tokens": 938,
+        "estimated_cost_usd": null,
+        "duration_seconds": 30.13,
+        "model": "qwen-coder-3b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 8,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The candidate workflow is already up-to-date and meets the project's requirements. No changes are necessary.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 6.75,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "builder-uv",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 38.33,
+      "metrics": {
+        "model_tokens": 1460,
+        "estimated_cost_usd": null,
+        "duration_seconds": 37.74,
+        "model": "qwen-coder-3b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 8,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The candidate workflow is already up-to-date and does not require any changes.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 5.48,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "builder-no-tests",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 23.54,
+      "metrics": {
+        "model_tokens": 883,
+        "estimated_cost_usd": null,
+        "duration_seconds": 22.94,
+        "model": "qwen-coder-3b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 7,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The candidate workflow is already up-to-date and meets the project's requirements. No changes are necessary.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 5.52,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "assertion-failure",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 6.88,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 6.88,
+        "tool_calls": 10
+      },
+      "diagnosis": "Failure is outside dependency-installation scope",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 6.74,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "poetry-project",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 0.0,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 0.0,
+        "tool_calls": 2
+      },
+      "diagnosis": "Only pip and uv are supported",
+      "baseline": {
+        "outcome": "unsupported",
+        "duration_seconds": 0.0,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "custom-command",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 0.02,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 0.02,
+        "tool_calls": 4
+      },
+      "diagnosis": "Unsupported command requires manual review: curl https://example.com/install.sh",
+      "baseline": {
+        "outcome": "unsupported",
+        "duration_seconds": 0.0,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "service-workflow",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 0.03,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 0.02,
+        "tool_calls": 4
+      },
+      "diagnosis": "Service/container/matrix workflows require manual review",
+      "baseline": {
+        "outcome": "unsupported",
+        "duration_seconds": 0.0,
+        "model_tokens": 0
+      }
+    }
+  ]
+}

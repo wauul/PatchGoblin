@@ -1,0 +1,42 @@
+[
+  {
+    "directory": "run-3",
+    "run_id": 36709047005,
+    "url": "https://github.com/wauul/PatchGoblin/actions/runs/36709047005",
+    "source_sha": "6250e09af02cb6485fdbde5a872681d722b608a3",
+    "conclusion": "success",
+    "created_at": "2026-09-30T11:31:14Z"
+  },
+  {
+    "directory": "run-4",
+    "run_id": 36710514898,
+    "url": "https://github.com/wauul/PatchGoblin/actions/runs/36710514898",
+    "source_sha": "2469e12bc29c61756634aa45d9b3d5597f266164",
+    "conclusion": "success",
+    "created_at": "2026-09-30T11:45:40Z"
+  },
+  {
+    "directory": "run-6",
+    "run_id": 36713471251,
+    "url": "https://github.com/wauul/PatchGoblin/actions/runs/36713471251",
+    "source_sha": "aab7bf6105872562479ca1df600220edbd15fdce",
+    "conclusion": "success",
+    "created_at": "2026-09-30T12:14:02Z"
+  },
+  {
+    "directory": "run-7",
+    "run_id": 36715987219,
+    "url": "https://github.com/wauul/PatchGoblin/actions/runs/36715987219",
+    "source_sha": "d7bc5171293aef95302ca4af960b241c909180e9",
+    "conclusion": "success",
+    "created_at": "2026-09-30T12:37:45Z"
+  },
+  {
+    "directory": "run-8",
+    "run_id": 36717541679,
+    "url": "https://github.com/wauul/PatchGoblin/actions/runs/36717541679",
+    "source_sha": "880d55a1353a7e1058a786ef22df20f50df124c9",
+    "conclusion": "success",
+    "scope": "Targeted uv builder retest only"
+  }
+]

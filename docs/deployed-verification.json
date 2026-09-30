@@ -1,0 +1,11 @@
+{
+  "at": "2026-09-30T12:48:51.404Z",
+  "url": "https://patchgoblin.wauul.chatgpt.site",
+  "job_id": 8,
+  "idempotency": true,
+  "unauthorized_repository_rejected": true,
+  "cross_origin_rejected": true,
+  "persisted_history": true,
+  "anonymous_status": 401,
+  "scope": "Deployed owner-private API via existing owner service credential. Browser UI uses a loopback proxy; hosted sign-in remains unverified."
+}

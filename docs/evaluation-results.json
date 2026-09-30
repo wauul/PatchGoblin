@@ -1,0 +1,300 @@
+{
+  "scope": "Local fixtures in real Docker sandboxes; no remote CI claim",
+  "cases": [
+    {
+      "id": "pip-conflict",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": true,
+      "incorrect_repair": false,
+      "duration_seconds": 105.92,
+      "metrics": {
+        "model_tokens": 1258,
+        "estimated_cost_usd": null,
+        "duration_seconds": 105.15,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 10,
+        "patch_attempts": 1
+      },
+      "diagnosis": "Conflicting dependency constraints detected between urllib3 and requests.",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 4.4,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "missing-dependency",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": true,
+      "incorrect_repair": false,
+      "duration_seconds": 79.29,
+      "metrics": {
+        "model_tokens": 1698,
+        "estimated_cost_usd": null,
+        "duration_seconds": 78.81,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 10,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The 'requests' module is missing, which is required by the test module 'test_weather.py'.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 6.46,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "python-mismatch",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": true,
+      "incorrect_repair": false,
+      "duration_seconds": 75.22,
+      "metrics": {
+        "model_tokens": 1257,
+        "estimated_cost_usd": null,
+        "duration_seconds": 74.89,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 16,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The Python version specified in the workflow does not match the required version in pyproject.toml.",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 5.47,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "install-command",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": true,
+      "incorrect_repair": false,
+      "duration_seconds": 95.98,
+      "metrics": {
+        "model_tokens": 2290,
+        "estimated_cost_usd": null,
+        "duration_seconds": 95.5,
+        "model": "qwen-coder-7b",
+        "model_calls": 2,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 9,
+        "patch_attempts": 2
+      },
+      "diagnosis": "The command 'python -m pip install requirements.txt' is attempting to install a package literally named 'requirements.txt', which cannot exist. The '-r' flag should be used to install the packages listed in requirements.txt.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 5.37,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "uv-lock-drift",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": true,
+      "incorrect_repair": false,
+      "duration_seconds": 74.64,
+      "metrics": {
+        "model_tokens": 1608,
+        "estimated_cost_usd": null,
+        "duration_seconds": 74.04,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 10,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The lockfile is stale and needs to be updated.",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 3.38,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "builder-pip",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 63.47,
+      "metrics": {
+        "model_tokens": 1001,
+        "estimated_cost_usd": null,
+        "duration_seconds": 63.0,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 8,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The provided candidate workflow is already compatible with the project's requirements and constraints.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 6.38,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "builder-uv",
+      "expected": "verified",
+      "actual": "unsupported",
+      "oracle_pass": false,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 91.26,
+      "metrics": {
+        "model_tokens": 1644,
+        "estimated_cost_usd": null,
+        "duration_seconds": 91.24,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 4
+      },
+      "diagnosis": "The provided candidate workflow is not compatible with the project's requirements. The candidate workflow specifies a Python version of '3.11', but the project's supported versions are '3.11', '3.12', and '3.13'. Additionally, the candidate workflow specifies a version of '0.8.22' for 'astral-sh/setup-uv', but the project's 'uv.lock' file does not include this version. The candidate workflow also specifies a version of '8.3.5' for 'pytest', but the project's 'pyproject.toml' file does not include this version.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 5.52,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "builder-no-tests",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 48.42,
+      "metrics": {
+        "model_tokens": 959,
+        "estimated_cost_usd": null,
+        "duration_seconds": 47.88,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 7,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The provided candidate workflow is a basic Python CI setup using GitHub Actions. It checks out the repository, sets up Python 3.11, and installs dependencies from requirements.txt. No additional checks or tests are included.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 5.38,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "assertion-failure",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": true,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 6.68,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 6.68,
+        "tool_calls": 10
+      },
+      "diagnosis": "Failure is outside dependency-installation scope",
+      "baseline": {
+        "outcome": "failed",
+        "duration_seconds": 6.43,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "poetry-project",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 0.0,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 0.0,
+        "tool_calls": 2
+      },
+      "diagnosis": "Only pip and uv are supported",
+      "baseline": {
+        "outcome": "unsupported",
+        "duration_seconds": 0.0,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "custom-command",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 0.02,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 0.02,
+        "tool_calls": 4
+      },
+      "diagnosis": "Unsupported command requires manual review: curl https://example.com/install.sh",
+      "baseline": {
+        "outcome": "unsupported",
+        "duration_seconds": 0.0,
+        "model_tokens": 0
+      }
+    },
+    {
+      "id": "service-workflow",
+      "expected": "unsupported",
+      "actual": "unsupported",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 0.02,
+      "metrics": {
+        "model_tokens": null,
+        "estimated_cost_usd": null,
+        "duration_seconds": 0.02,
+        "tool_calls": 4
+      },
+      "diagnosis": "Service/container/matrix workflows require manual review",
+      "baseline": {
+        "outcome": "unsupported",
+        "duration_seconds": 0.0,
+        "model_tokens": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "status": "unsupported",
+  "events": [
+    {
+      "stage": "inspect",
+      "message": "Reading immutable repository metadata and CI evidence",
+      "at": 1790772467.5880306
+    },
+    {
+      "stage": "reproduce",
+      "message": "Confirming CI is absent and inspecting the existing project checks",
+      "at": 1790772467.5903037
+    },
+    {
+      "stage": "investigate",
+      "message": "Selecting an evidence-backed investigation or minimal patch",
+      "at": 1790772467.590514
+    }
+  ],
+  "verification": [],
+  "patch": {},
+  "diff": "",
+  "diagnosis": "The provided candidate workflow is not compatible with the project's requirements. The candidate workflow specifies a Python version of '3.11', but the project's supported versions are '3.11', '3.12', and '3.13'. Additionally, the candidate workflow specifies a version of '0.8.22' for 'astral-sh/setup-uv', but the project's 'uv.lock' file does not include this version. The candidate workflow also specifies a version of '8.3.5' for 'pytest', but the project's 'pyproject.toml' file does not include this version.",
+  "limitations": [],
+  "metrics": {
+    "model_tokens": 1644,
+    "estimated_cost_usd": null,
+    "duration_seconds": 91.24,
+    "model": "qwen-coder-7b",
+    "model_calls": 1,
+    "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+    "tool_calls": 4
+  },
+  "repo": "wauul/patchgoblin-lab",
+  "mode": "builder",
+  "base_ref": "main",
+  "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "run_url": null,
+  "project": {
+    "manager": "uv",
+    "python": "3.11",
+    "supported_versions": [
+      "3.11",
+      "3.12",
+      "3.13"
+    ],
+    "install": "uv sync --locked",
+    "checks": [
+      "uv run --locked python -m pytest"
+    ],
+    "has_tests": true,
+    "documented_commands": []
+  },
+  "category": "incompatible_constraints",
+  "evidence": [
+    "The candidate workflow specifies a Python version of '3.11', but the project's supported versions are '3.11', '3.12', and '3.13'.",
+    "The candidate workflow specifies a version of '0.8.22' for 'astral-sh/setup-uv', but the project's 'uv.lock' file does not include this version.",
+    "The candidate workflow specifies a version of '8.3.5' for 'pytest', but the project's 'pyproject.toml' file does not include this version."
+  ]
+}

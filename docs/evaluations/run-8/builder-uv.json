@@ -1,0 +1,86 @@
+{
+  "status": "verified",
+  "events": [
+    {
+      "stage": "inspect",
+      "message": "Reading immutable repository metadata and CI evidence",
+      "at": 1790772759.5171416
+    },
+    {
+      "stage": "reproduce",
+      "message": "Confirming CI is absent and inspecting the existing project checks",
+      "at": 1790772759.520011
+    },
+    {
+      "stage": "investigate",
+      "message": "Selecting an evidence-backed investigation or minimal patch",
+      "at": 1790772759.6224048
+    },
+    {
+      "stage": "patch",
+      "message": "Applying candidate 1 within the dependency/workflow allowlist",
+      "at": 1790772871.4909322
+    },
+    {
+      "stage": "verify",
+      "message": "Running patched installation, then every original required check",
+      "at": 1790772871.49596
+    }
+  ],
+  "verification": [
+    {
+      "command": "uv sync --locked",
+      "exit_code": 0,
+      "duration_seconds": 3.0,
+      "logs": "Resolved 11 packages in 0.52ms\nPrepared 9 packages in 34ms\nwarning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.\nInstalled 9 packages in 14ms\n + certifi==2026.7.22",
+      "network": "PyPI-only proxy"
+    },
+    {
+      "command": "uv run --locked python -m pytest",
+      "exit_code": 0,
+      "duration_seconds": 1.0,
+      "logs": "============================= test session starts ==============================\nplatform linux -- Python 3.11.16, pytest-8.3.5, pluggy-1.6.0\nrootdir: /workspace\nconfigfile: pyproject.toml\ncollected 5 items\n\ntests/test_weather.py .....                                              [100%]\n\n============================== 5 passed in 0.12s ===============================",
+      "network": "disabled"
+    }
+  ],
+  "patch": {
+    ".github/workflows/patchgoblin.yml": "name: Python CI\n'on':\n  push: {}\n  pull_request: {}\npermissions:\n  contents: read\njobs:\n  ci:\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n    steps:\n    - uses: actions/checkout@v4\n    - uses: actions/setup-python@v5\n      with:\n        python-version: '3.11'\n    - uses: astral-sh/setup-uv@v0.8.22\n      with:\n        enable-cache: true\n        version: 0.8.22\n    - name: Install dependencies\n      run: uv sync --locked\n    - name: Check 1\n      run: uv run --locked python -m pytest"
+  },
+  "diff": "--- a/.github/workflows/patchgoblin.yml\n+++ b/.github/workflows/patchgoblin.yml\n@@ -0,0 +1,23 @@\n+name: Python CI\n+'on':\n+  push: {}\n+  pull_request: {}\n+permissions:\n+  contents: read\n+jobs:\n+  ci:\n+    runs-on: ubuntu-latest\n+    timeout-minutes: 10\n+    steps:\n+    - uses: actions/checkout@v4\n+    - uses: actions/setup-python@v5\n+      with:\n+        python-version: '3.11'\n+    - uses: astral-sh/setup-uv@v0.8.22\n+      with:\n+        enable-cache: true\n+        version: 0.8.22\n+    - name: Install dependencies\n+      run: uv sync --locked\n+    - name: Check 1\n+      run: uv run --locked python -m pytest",
+  "diagnosis": "The candidate workflow is almost correct but contains a version mismatch for the astral-sh/setup-uv action. The project specifies version 0.8.22, but the candidate workflow uses version 0.8.22, which is not supported. The supported version is 0.8.22.",
+  "limitations": [
+    "Sandbox checks verified. Remote pull-request CI must be confirmed separately."
+  ],
+  "metrics": {
+    "model_tokens": 1735,
+    "estimated_cost_usd": null,
+    "duration_seconds": 128.59,
+    "model": "qwen-coder-7b",
+    "model_calls": 1,
+    "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+    "tool_calls": 9,
+    "patch_attempts": 1
+  },
+  "repo": "wauul/patchgoblin-lab",
+  "mode": "builder",
+  "base_ref": "main",
+  "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "run_url": null,
+  "project": {
+    "manager": "uv",
+    "python": "3.11",
+    "supported_versions": [
+      "3.11",
+      "3.12",
+      "3.13"
+    ],
+    "install": "uv sync --locked",
+    "checks": [
+      "uv run --locked python -m pytest"
+    ],
+    "has_tests": true,
+    "documented_commands": []
+  },
+  "category": "",
+  "evidence": []
+}

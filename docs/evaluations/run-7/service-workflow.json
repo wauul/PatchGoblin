@@ -1,0 +1,41 @@
+{
+  "status": "unsupported",
+  "events": [
+    {
+      "stage": "inspect",
+      "message": "Reading immutable repository metadata and CI evidence",
+      "at": 1790772632.2270868
+    }
+  ],
+  "verification": [],
+  "patch": {},
+  "diff": "",
+  "diagnosis": "Service/container/matrix workflows require manual review",
+  "limitations": [],
+  "metrics": {
+    "model_tokens": null,
+    "estimated_cost_usd": null,
+    "duration_seconds": 0.02,
+    "tool_calls": 4
+  },
+  "repo": "wauul/patchgoblin-lab",
+  "mode": "repair",
+  "base_ref": "main",
+  "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "run_url": null,
+  "project": {
+    "manager": "pip",
+    "python": "3.11",
+    "supported_versions": [
+      "3.11",
+      "3.12",
+      "3.13"
+    ],
+    "install": "python -m pip install -r requirements.txt",
+    "checks": [
+      "python -m pytest"
+    ],
+    "has_tests": true,
+    "documented_commands": []
+  }
+}

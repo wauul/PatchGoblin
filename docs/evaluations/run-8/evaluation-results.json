@@ -1,0 +1,31 @@
+{
+  "scope": "Local fixtures in real Docker sandboxes; no remote CI claim",
+  "cases": [
+    {
+      "id": "builder-uv",
+      "expected": "verified",
+      "actual": "verified",
+      "oracle_pass": true,
+      "reproduction_success": false,
+      "verified_repair_success": false,
+      "incorrect_repair": false,
+      "duration_seconds": 129.66,
+      "metrics": {
+        "model_tokens": 1735,
+        "estimated_cost_usd": null,
+        "duration_seconds": 128.59,
+        "model": "qwen-coder-7b",
+        "model_calls": 1,
+        "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing.",
+        "tool_calls": 9,
+        "patch_attempts": 1
+      },
+      "diagnosis": "The candidate workflow is almost correct but contains a version mismatch for the astral-sh/setup-uv action. The project specifies version 0.8.22, but the candidate workflow uses version 0.8.22, which is not supported. The supported version is 0.8.22.",
+      "baseline": {
+        "outcome": "verified",
+        "duration_seconds": 5.51,
+        "model_tokens": 0
+      }
+    }
+  ]
+}
