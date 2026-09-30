@@ -93,9 +93,9 @@ class Agent:
                 for _ in range(min(int(os.getenv("MAX_STEPS", "6")), 6)):
                     self.event("investigate", "Selecting an evidence-backed investigation or minimal patch")
                     decision = self.model.decide(evidence)
-                    self.state["diagnosis"] = str(decision.get("diagnosis", ""))[:3000]
-                    self.state["category"] = str(decision.get("category", ""))[:100]
-                    self.state["evidence"] = [str(x)[:1000] for x in decision.get("evidence", [])[:8]]
+                    self.state["diagnosis"] = redact(str(decision.get("diagnosis", "")))[:3000]
+                    self.state["category"] = redact(str(decision.get("category", "")))[:100]
+                    self.state["evidence"] = [redact(str(x))[:1000] for x in decision.get("evidence", [])[:8]]
                     action = decision.get("action")
                     if action == "unsupported":
                         raise Unsupported(self.state["diagnosis"] or "Model found insufficient supported evidence")

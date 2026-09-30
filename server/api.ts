@@ -2,6 +2,19 @@ export interface Env { GITHUB_TOKEN?:string; CONTROL_REPO?:string; ALLOWED_REPOS
 type Json = Record<string, any>;
 const marker='<!-- patchgoblin-state-v1 -->\n';
 const terminal=new Set(['verified','submitted','unsupported','failed','cancelled']);
+async function decodeState(text:string):Promise<Json>{
+ const value=JSON.parse(text);
+ if(value.encoding!=='gzip-base64')return value;
+ if(!Number.isInteger(value.bytes)||value.bytes<=0||value.bytes>250000||typeof value.payload!=='string'||value.payload.length>59000)throw new Error('Invalid state envelope.');
+ const bytes=Uint8Array.from(atob(value.payload),c=>c.charCodeAt(0));
+ const reader=new Response(bytes).body!.pipeThrough(new DecompressionStream('gzip')).getReader();
+ const chunks:Uint8Array[]=[];let size=0;
+ for(;;){const next=await reader.read();if(next.done)break;size+=next.value.length;if(size>250000){await reader.cancel();throw new Error('State exceeds decompression budget.');}chunks.push(next.value);}
+ const raw=new Uint8Array(size);let offset=0;for(const chunk of chunks){raw.set(chunk,offset);offset+=chunk.length;}
+ const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',raw))).map(b=>b.toString(16).padStart(2,'0')).join('');
+ if(size!==value.bytes||digest!==value.sha256)throw new Error('State checksum mismatch.');
+ return JSON.parse(new TextDecoder().decode(raw));
+}
 export class ApiError extends Error {constructor(public status:number,message:string){super(message)}}
 export const redact=(s:string)=>s.replace(/(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{20,}|Bearer\s+\S+)/gi,'[REDACTED]');
 const filteredLogs=(s:string)=>redact(s.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g,'').replace(/((?:password|token|api[_-]?key|secret)\s*[=:]\s*)[^\s,;]+/gi,'$1[REDACTED]')).split('\n').filter(l=>/error|fail|conflict|requires|incompatible|ModuleNotFound|resolution|install|python|lock|dependency/i.test(l)).slice(-100).join('\n').slice(-12000);
@@ -32,7 +45,7 @@ export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):
   const input=issueRequest(issue);
   const comments=await github(`/repos/${control}/issues/${issue.number}/comments?per_page=100`);
   let state:Json={status:issue.state==='closed'?'cancelled':'queued',events:[],verification:[],patch:{},diff:'',diagnosis:'Waiting for a worker',metrics:{model_tokens:null,estimated_cost_usd:null},limitations:[]};
-  for(const c of comments){if(c.body.startsWith(marker)&&['github-actions[bot]',ownerLogin].includes(c.user.login)){try{state=JSON.parse(c.body.slice(marker.length));}catch{/* Ignore malformed comments. */}}}
+  for(const c of comments){if(c.body.startsWith(marker)&&['github-actions[bot]',ownerLogin].includes(c.user.login)){try{state=await decodeState(c.body.slice(marker.length));}catch{/* Ignore malformed comments. */}}}
   const pr=comments.findLast((c:Json)=>c.user.login===ownerLogin&&c.body.startsWith('<!-- patchgoblin-pr-v1 -->'));
   if(pr){try{Object.assign(state,JSON.parse(pr.body.split('\n').slice(1).join('\n')),{status:'submitted'});}catch{}}
   if(issue.state==='closed'&&state.status!=='submitted')state.status='cancelled';
@@ -105,7 +118,7 @@ export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):
     if(state.status!=='verified'||!state.verification.length||state.verification.some((v:Json)=>v.exit_code!==0))throw new ApiError(409,'A verified patch is required before submission.');
     if(!allowed.includes(input.repo))throw new ApiError(403,'Repository is outside the allowlist.');
     const files=Object.entries(state.patch) as [string,string][];
-    if(!files.length||files.length>4||files.some(([p,c])=>p.includes('..')||p.includes('\\')||p.startsWith('/')||typeof c!=='string'||c.length>24000||!(p.startsWith('.github/workflows/')||['requirements.txt','requirements-dev.txt','pyproject.toml','uv.lock'].includes(p))))throw new ApiError(400,'Patch failed the submission allowlist.');
+    if(!files.length||files.length>4||files.reduce((sum,[p,c])=>sum+(p==='uv.lock'?0:c.length),0)>24000||files.some(([p,c])=>p.includes('..')||p.includes('\\')||p.startsWith('/')||typeof c!=='string'||c.length>(p==='uv.lock'?128000:24000)||!(p.startsWith('.github/workflows/')||['requirements.txt','requirements-dev.txt','pyproject.toml','uv.lock'].includes(p))))throw new ApiError(400,'Patch failed the submission allowlist.');
     const current=await github(`/repos/${input.repo}/commits/${encodeURIComponent(state.base_ref)}`);
     if(current.sha!==state.sha)throw new ApiError(409,'Base branch changed during verification. Start a new job against the current commit.');
     const branch=`codex/patchgoblin-${issue.number}`;

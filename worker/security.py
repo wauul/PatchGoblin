@@ -10,6 +10,16 @@ def redact(text: str) -> str:
     return re.sub(r"(?i)(password|token|secret|api[_-]?key)\s*[:=]\s*[^\s,;]+", r"\1=[REDACTED]", text)
 
 
+def redact_data(value):
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, dict):
+        return {k:redact_data(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [redact_data(v) for v in value]
+    return value
+
+
 def filter_logs(text: str, limit: int = 10000) -> str:
     lines = re.sub(r"\x1b\[[0-9;]*m", "", redact(text)).splitlines()
     selected = set()
@@ -32,7 +42,7 @@ def safe_path(path: str) -> str:
 def validate_patch(files: dict[str, str], mode: str, originals: dict[str, str]) -> None:
     if not isinstance(files, dict) or any(not isinstance(p, str) or not isinstance(v, str) for p, v in files.items()):
         raise ValueError("files must map repository paths to complete UTF-8 content strings, not nested JSON objects")
-    if not files or len(files) > 4 or sum(len(v) for v in files.values()) > 24000:
+    if not files or len(files) > 4 or sum(len(v) for p, v in files.items() if p != "uv.lock") > 24000 or len(files.get("uv.lock", "")) > 128000:
         raise ValueError("Patch exceeds file/size budget")
     if mode == "repair" and all(p in originals and v.strip() == originals[p].strip() for p, v in files.items()):
         raise ValueError("Candidate changes no content; patch the file responsible for the reproduced failure")

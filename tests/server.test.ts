@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {gzipSync} from 'node:zlib';
 import {handleApi,redact,type Env} from '../server/api';
 const env:Env={GITHUB_TOKEN:'synthetic-token',CONTROL_REPO:'wauul/PatchGoblin',ALLOWED_REPOS:'wauul/patchgoblin-lab',OWNER_LOGIN:'wauul'};
 const request=(path:string,body?:any,user='alice')=>new Request('https://patchgoblin.example/api'+path,{method:body===undefined?'GET':'POST',headers:{...(user?{'oai-authenticated-user-id':user}:{}),'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
@@ -50,4 +51,20 @@ test('hourly cap rejects new work while an idempotent retry returns its existing
  assert.equal(limit.status,429);
  const retry=await handleApi(request('/jobs',{repo:'wauul/patchgoblin-lab',mode:'builder',key:'existing-key-number-0'}),env,fetcher as typeof fetch);
  assert.equal(retry.status,200);assert.equal((await retry.json()).id,1);
+});
+test('large canonical lockfile evidence decodes only with a trusted author and valid checksum',async()=>{
+ const ownerDigest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('alice|wauul/PatchGoblin'));
+ const owner=Array.from(new Uint8Array(ownerDigest)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);
+ const lock='package = "fixture"\n'.repeat(4000);
+ const raw=Buffer.from(JSON.stringify({status:'verified',patch:{'uv.lock':lock},verification:[{exit_code:0}]}));
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',raw))).map(b=>b.toString(16).padStart(2,'0')).join('');
+ const envelope={encoding:'gzip-base64',bytes:raw.length,sha256:hash,payload:gzipSync(raw).toString('base64')};
+ let author='github-actions[bot]';
+ const fetcher=async(url:any)=>String(url).includes('/comments?')?json([{user:{login:author},body:'<!-- patchgoblin-state-v1 -->\n'+JSON.stringify(envelope)}]):json({number:7,state:'open',title:'PatchGoblin job repair fixture',user:{login:'wauul'},body:JSON.stringify({owner,repo:'wauul/patchgoblin-lab'})});
+ const r=await handleApi(request('/jobs/7'),env,fetcher as typeof fetch);const state=await r.json();
+ assert.equal(state.status,'verified');assert.equal(state.patch['uv.lock'],lock);
+ author='untrusted-contributor';
+ const forged=await handleApi(request('/jobs/7'),env,fetcher as typeof fetch);assert.equal((await forged.json()).status,'queued');
+ author='github-actions[bot]';envelope.sha256='0'.repeat(64);
+ const damaged=await handleApi(request('/jobs/7'),env,fetcher as typeof fetch);assert.equal((await damaged.json()).status,'queued');
 });

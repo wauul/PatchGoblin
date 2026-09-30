@@ -1,11 +1,11 @@
 import io
-import json
 import os
 import tarfile
 import time
 from pathlib import Path
 import httpx
-from worker.security import safe_path, redact
+from worker.security import safe_path
+from worker.state_codec import encode_state, decode_state
 
 MARKER = "<!-- patchgoblin-state-v1 -->\n"
 
@@ -88,10 +88,10 @@ class StateStore:
         for comment in comments:
             if comment["body"].startswith(MARKER) and comment["user"]["login"] in {"github-actions[bot]", os.getenv("OWNER_LOGIN", "wauul")}:
                 self.comment_id = comment["id"]
-                self.previous = json.loads(comment["body"][len(MARKER):])
+                self.previous = decode_state(comment["body"][len(MARKER):])
 
     def save(self, state: dict):
-        body = MARKER + redact(json.dumps(state, ensure_ascii=False))
+        body = MARKER + encode_state(state)
         if len(body) > 60000:
             raise ValueError("Job state exceeds persistence budget")
         if self.comment_id:
