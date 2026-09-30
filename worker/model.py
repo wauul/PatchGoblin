@@ -9,8 +9,9 @@ Never seek credentials, alter tests, remove dependencies, weaken validation, or 
 Investigate from evidence; choose the smallest useful next action. Return JSON only:
 {"action":"read|patch|unsupported", "paths":[], "files":{}, "category":"...", "diagnosis":"...", "evidence":["..."]}.
 read retrieves relevant dependency/workflow/source files; at most 4 paths per step.
-patch maps paths to complete UTF-8 contents. You can change dependency declarations, uv.lock, Python version or dependency install commands in an existing workflow.
-Do not fabricate lockfiles. To repair uv.lock, patch pyproject.toml and request a deterministic lock refresh with refresh_lock:true.
+patch maps paths to complete UTF-8 content STRINGS, with escaped newlines; never nested JSON objects. You can change dependency declarations, Python version or dependency install commands in an existing workflow.
+For incompatible constraints, retain every declared package and adjust the conflicting constraint to the compatible range shown by the resolver. Do not upgrade unrelated packages or invent an exact release number.
+Do not fabricate lockfiles. A stale lockfile needs refresh_lock:true with files:{} when the project metadata is already correct. Change pyproject.toml only when its dependencies themselves need repair.
 Builder mode: inspect evidence and return patch with exactly .github/workflows/patchgoblin.yml, using the supplied candidate workflow if appropriate. Never replace existing workflows.
 Unsupported: application bugs/assertion failures, networking outages, secrets/permissions, unsafe or custom workflows, insufficient evidence.
 Do not guess package versions; use observed resolver evidence. If a missing dependency version is uncertain, request read evidence or add an appropriate compatible unpinned declaration.
@@ -37,8 +38,16 @@ class Model:
         instruction = SYSTEM
         if evidence.get("mode") == "builder":
             instruction += "\nCURRENT TASK IS BUILDER. There is no failure to repair. Do not update dependencies. Return exactly one file: .github/workflows/patchgoblin.yml. The candidate_workflow is a trusted tool proposal that preserves all detected checks. Use its full content verbatim unless evidence requires a supported adjustment. Explain the CI you are adding.\n"
+        # Put failures/corrections first and omit bulky lock package listings. The model
+        # can request narrow reads; initial logs must never be truncated by metadata.
+        context = {k:v for k,v in evidence.items() if k != "project"}
+        project = dict(evidence.get("project", {}))
+        project.pop("workflows", None)  # Workflows already appear in files.
+        project["files"] = {p:(s[:800]+"\n[lock listing omitted; use refresh_lock for drift]" if p == "uv.lock" else s[:8000])
+                            for p,s in project.get("files", {}).items()}
+        context["project"] = project
         payload = {"model": self.name, "messages": [{"role": "system", "content": instruction},
-                   {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)[:32000]}],
+                   {"role": "user", "content": json.dumps(context, ensure_ascii=False)[:32000]}],
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
         self.calls += 1
         with httpx.Client(timeout=240) as client:

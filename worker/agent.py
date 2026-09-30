@@ -113,7 +113,9 @@ class Agent:
                     try:
                         if "uv.lock" in files:
                             raise ValueError("Lockfiles must be refreshed by uv, never authored by the model")
-                        validate_patch(files, mode, originals)
+                        refresh_only = not files and decision.get("refresh_lock") and mode == "repair" and project["manager"] == "uv"
+                        if not refresh_only:
+                            validate_patch(files, mode, originals)
                     except ValueError as exc:
                         # Rejected candidates consume a patch attempt without touching the checkout.
                         # Give the model concrete policy feedback within the original budget.

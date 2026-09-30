@@ -30,6 +30,8 @@ def safe_path(path: str) -> str:
 
 
 def validate_patch(files: dict[str, str], mode: str, originals: dict[str, str]) -> None:
+    if not isinstance(files, dict) or any(not isinstance(p, str) or not isinstance(v, str) for p, v in files.items()):
+        raise ValueError("files must map repository paths to complete UTF-8 content strings, not nested JSON objects")
     if not files or len(files) > 4 or sum(len(v) for v in files.values()) > 24000:
         raise ValueError("Patch exceeds file/size budget")
     for path, content in files.items():
