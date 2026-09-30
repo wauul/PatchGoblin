@@ -3,6 +3,9 @@ import {createRoot} from 'react-dom/client';
 import {ArrowUpRight,ArrowRight,GitBranch,GitPullRequest,Check,CheckCircle2,Clock,Code2,FileDiff,FlaskConical,History,Loader2,Play,Plus,ShieldCheck,Sparkles,Terminal,TriangleAlert,Wrench,X,ChevronRight,BookOpen,GitFork,Layers3,RotateCw} from 'lucide-react';
 import {demoJob} from './demo';
 import './style.css';
+// Sites serves the homepage separately from the Worker. Navigate directly on
+// the retired origin, including tabs with a cached API redirect.
+if(location.origin==='https://patchgoblin.wauul.chatgpt.site')location.replace('https://patchgoblin.vercel.app/'+location.search+location.hash);
 type Job=Record<string,any>;
 const stages=['inspect','reproduce','investigate','patch','verify','submit'];
 const finished=['submitted','unsupported','failed','cancelled'];
