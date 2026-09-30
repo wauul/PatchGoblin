@@ -12,8 +12,10 @@ def main():
         print("Ignored: not an authorized PatchGoblin job")
         return
     request = json.loads(issue["body"])
-    if set(request) - {"repo","mode","run_id","ref","owner","key","created_at"}:
+    if set(request) - {"repo","mode","run_id","ref","owner","key","created_at","ci_logs"}:
         raise ValueError("Unknown request fields")
+    if "ci_logs" in request and (not isinstance(request["ci_logs"], str) or len(request["ci_logs"]) > 12000):
+        raise ValueError("Invalid redacted CI evidence")
     github = GitHub()
     store = StateStore(github, os.environ["GITHUB_REPOSITORY"], issue["number"])
     result = Agent(github, store).execute(request)
