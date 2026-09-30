@@ -152,6 +152,7 @@ def detect(root: Path):
         "units": units,
         "services": services,
         "configuration_files": configs,
+        "configuration_fingerprint": hashlib.sha256(json.dumps({p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in configs},sort_keys=True).encode()).hexdigest(),
         "fingerprint": hashlib.sha256(json.dumps(units, sort_keys=True).encode()).hexdigest(),
     }
 
@@ -199,7 +200,7 @@ def coverage(root, requirements):
             manager = None
             for step in job.get("steps", []):
                 if "setup-node@" in step.get("uses", ""):
-                    runtime = "node:" + str(step.get("with", {}).get("node-version", ""))
+                    runtime = "node:" + str(step.get("with", {}).get("node-version", "")).removesuffix('.x')
                 if "setup-python@" in step.get("uses", ""):
                     runtime = str(step.get("with", {}).get("python-version", ""))
                 for command in step.get("run", "").splitlines():
@@ -208,6 +209,7 @@ def coverage(root, requirements):
                             "path": step.get("working-directory", cwd),
                             "command": command.strip(),
                             "conditional": bool(step.get("if") or job.get("if")),
+                            "runtime": runtime,
                         }
                     )
                 if any(step.get("run", "").startswith(x) for x in ["npm ci", "pnpm install", "yarn install"]):
@@ -215,20 +217,27 @@ def coverage(root, requirements):
             for unit in requirements["units"]:
                 scope = events.get("push", {}) if isinstance(events, dict) else {}
                 filters = scope.get("paths", []) if isinstance(scope, dict) else []
-                included = not filters or any(
-                    any(fnmatch.fnmatch(f, pattern) for pattern in filters if not pattern.startswith("!"))
+                triggers = set(events) if isinstance(events,(dict,list)) else {events}
+                def path_included(f):
+                    included = not filters
+                    for pattern in filters:
+                        excluded = pattern.startswith('!')
+                        if fnmatch.fnmatch(f,pattern[1:] if excluded else pattern):
+                            included = not excluded
+                    return included
+                included = 'push' in triggers and not (isinstance(scope,dict) and scope.get('paths-ignore')) and (not filters or any(
+                    path_included(f)
                     for f in unit["evidence_files"]
-                )
+                ))
                 for command in unit["checks"]:
                     matching = any(
                         r["path"].rstrip("/") == unit["path"].rstrip("/")
-                        and r["command"] == command
+                        and re.sub(r'^(npm|pnpm|yarn) (test|build|lint)$',r'\1 run \2',r["command"]) == command
                         and not r["conditional"]
+                        and r['runtime'] == unit['runtime']
                         for r in runs
                     )
-                    compatible = runtime == unit["runtime"] and (
-                        unit["language"] == "python" or manager == unit["manager"]
-                    )
+                    compatible = unit["language"] == "python" or manager == unit["manager"]
                     if matching and included and compatible:
                         covered.append(
                             {

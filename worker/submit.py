@@ -56,14 +56,14 @@ def submit(github, job_id, request, state, cancelled=lambda: False):
     if source["sha"] != state["sha"]:
         raise ValueError("Base branch changed during verification. Start a new job against the current commit.")
     owner = repo.split("/")[0]
-    branch = state.get('maintenance_branch') or maintenance_prefix(request) if request["mode"] == "maintenance" else f"codex/patchgoblin-neon-{job_id}"
+    branch = (state.get('maintenance_branch') or maintenance_prefix(request)) if request["mode"] == "maintenance" else f"codex/patchgoblin-neon-{job_id}"
     existing = github.request("GET", prefix + f"/pulls?state=all&head={owner}:{branch}")
     if existing and request["mode"] != "maintenance":
         pr = existing[0]
     else:
         open_pr = next((p for p in existing if p["state"] == "open"), None)
         if existing and not open_pr and request["mode"] == "maintenance":
-            branch = f"codex/patchgoblin-maintenance-{job_id}"
+            branch = f"{maintenance_prefix(request)}-{job_id}"
         parent = current["sha"]
         parents = [parent]
         if open_pr:

@@ -136,3 +136,21 @@ def test_yarn_berry_reports_setup_boundary_instead_of_using_classic(tmp_path):
     (tmp_path/'yarn.lock').write_text('__metadata:\n  version: 8\n')
     with pytest.raises(Unsupported, match='Yarn Berry'):
         proposal(tmp_path,'builder')
+
+
+def test_manual_only_workflow_does_not_cover_continuous_pushes(tmp_path):
+    node_project(tmp_path)
+    p = tmp_path/'.github/workflows/ci.yml'
+    p.parent.mkdir(parents=True)
+    p.write_text("on: [workflow_dispatch]\njobs:\n  test:\n    steps:\n      - uses: actions/setup-node@v4\n        with: {node-version: '22.x'}\n      - run: npm ci\n      - run: npm test\n")
+    assert proposal(tmp_path,'maintenance')['files']
+    p.write_text(p.read_text().replace('workflow_dispatch','push'))
+    assert proposal(tmp_path,'maintenance')['files']=={}
+
+
+def test_negative_path_filter_excludes_package(tmp_path):
+    node_project(tmp_path)
+    p = tmp_path/'.github/workflows/ci.yml'
+    p.parent.mkdir(parents=True)
+    p.write_text("on:\n  push:\n    paths: ['**', '!package*']\njobs:\n  test:\n    steps:\n      - uses: actions/setup-node@v4\n        with: {node-version: '22'}\n      - run: npm ci\n      - run: npm run test\n")
+    assert proposal(tmp_path,'maintenance')['files']

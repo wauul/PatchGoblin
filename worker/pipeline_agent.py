@@ -38,6 +38,10 @@ class PipelineAgent(Agent):
             self.state.update(
                 repo=repo, mode=request["mode"], base_ref=request.get("base_ref") or ref, sha=sha, source_ref=ref
             )
+            parents = commit.get('parents',[])
+            if parents:
+                comparison = self.github.request('GET',f"/repos/{repo}/compare/{parents[0]['sha']}...{sha}")
+                self.state['changed_files'] = [{'path':x['filename'],'status':x['status']} for x in comparison.get('files',[])[:100]]
             with tempfile.TemporaryDirectory(prefix="patchgoblin-") as directory:
                 root = Path(directory)
                 self.github.download(repo, sha, root)
@@ -69,6 +73,7 @@ class PipelineAgent(Agent):
                 originals = workflows(root)
                 evidence = {
                     "mode": request["mode"],
+                    "changed_files": self.state.get('changed_files',[]),
                     "project": {
                         "files": originals,
                         "manager": plan["coverage"]["requirements"]["units"][0]["manager"],
