@@ -5,6 +5,7 @@ export default {async fetch(request:Request,env:Env){
  if(env.PRODUCTION_URL){
   const target=new URL(request.url);const production=new URL(env.PRODUCTION_URL);
   if(production.protocol!=='https:')throw new Error('Production redirect must use HTTPS');
+  if(path==='/api/bootstrap'&&request.method==='GET')return Response.json({connected:false,production_url:production.origin},{headers:{'Cache-Control':'no-store'}});
   target.protocol=production.protocol;target.host=production.host;
   if(request.method!=='GET'&&request.method!=='HEAD')return Response.json({error:'PatchGoblin moved to '+production.origin+'. Open the new app to start a job.'},{status:410});
   return Response.redirect(target.toString(),308);

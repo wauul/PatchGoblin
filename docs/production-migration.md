@@ -23,6 +23,10 @@ The repair's first model proposal attempted to remove an existing dependency. Pa
 
 The earlier complete 12-case Qwen evaluation remains unchanged in [evaluation.md](evaluation.md). Its scores are **not** Groq evaluation results. This migration verified the two real hosted flows above, plus persistence, authentication, and cancellation checks recorded in migration-verification.json.
 
+Live job 13 was cancelled while its Railway sandbox was running. The durable final state was cancelled after reload, no PR was created, and the project had no remaining live sandboxes. The completed cancellation retained 1,412 measured tokens rather than falsely reporting zero usage. The new job prompt described the missing CI correctly; the original builder explanation remains in job 10.
+
+![Vercel production repair with sandbox and remote CI evidence](migration-repair.png)
+
 ## Durable queue and isolation
 
 db/001_jobs.sql installs an idempotent schema without removing legacy data. scripts/migrate-neon.py imports only terminal owner-created GitHub jobs and their trusted state/PR metadata, preserving original IDs, timestamps, statuses, and links. Eight jobs were imported. Retrying the import does not overwrite an existing record.
