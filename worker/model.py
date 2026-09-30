@@ -49,9 +49,21 @@ class Model:
         project["files"] = {p:(s[:800]+"\n[lock listing omitted; use refresh_lock for drift]" if p == "uv.lock" else s[:8000])
                             for p,s in project.get("files", {}).items()}
         context["project"] = project
+        permitted = [p for p in project.get("files", {}) if p in {"requirements.txt", "requirements-dev.txt", "pyproject.toml"} or p.startswith(".github/workflows/")]
+        if evidence.get("mode") == "builder":
+            permitted = [".github/workflows/patchgoblin.yml"]
+        schema = {"type":"object", "properties":{
+            "action":{"type":"string", "enum":["read","patch","unsupported"]},
+            "diagnosis":{"type":"string"}, "category":{"type":"string"},
+            "paths":{"type":"array", "items":{"type":"string"}, "maxItems":4},
+            "files":{"type":"object", "properties":{p:{"type":"string"} for p in permitted}, "additionalProperties":False},
+            "refresh_lock":{"type":"boolean"}, "evidence":{"type":"array", "items":{"type":"string"}, "maxItems":8}},
+            "required":["action","diagnosis","files"], "additionalProperties":False}
         payload = {"model": self.name, "messages": [{"role": "system", "content": instruction},
                    {"role": "user", "content": json.dumps(context, ensure_ascii=False)[:32000]}],
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
+        if urlparse(self.base).hostname in {"127.0.0.1", "localhost"}:
+            payload["response_format"]["schema"] = schema
         with httpx.Client(timeout=240) as client:
             headers = {"Authorization": "Bearer " + self.key}
             # Exact chat-template token counting for the pinned local llama.cpp server.
@@ -70,7 +82,12 @@ class Model:
                 raise RuntimeError("Model token budget cannot cover this prompt and a useful response")
             payload["max_tokens"] = min(1400, available)
             self.calls += 1
-            response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
+            try:
+                response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
+            except httpx.RequestError as exc:
+                self.usage_available = False
+                self.tokens += budget  # A timed-out inference may still have generated tokens.
+                raise RuntimeError("Model inference request failed or timed out; usage is unavailable and the remaining budget was consumed") from exc
         if response.status_code != 200:
             # Provider response may include secret-bearing snippets; expose only status.
             raise RuntimeError(f"Model provider returned HTTP {response.status_code}; no fix was attempted")
