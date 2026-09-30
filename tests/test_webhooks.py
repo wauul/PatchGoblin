@@ -1,6 +1,7 @@
 """Delivery policy tests; provider/database doubles are explicit unit fixtures."""
 
 from contextlib import contextmanager
+import pytest
 from worker import webhooks
 
 
@@ -106,3 +107,48 @@ def test_active_job_backpressure_remains_retryable_after_three_attempts(monkeypa
     monkeypatch.setattr(webhooks, "process", lambda row: (_ for _ in ()).throw(RuntimeError("PG_ACTIVE_JOB")))
     assert webhooks.drain_deliveries()
     assert db.calls[-1][1][0] == "pending"
+
+
+def native_action(monkeypatch, permission, registered=True):
+    monkeypatch.setenv('GITHUB_APP_ID','51')
+    repo={**REPO,'controller_id':999}
+    class DB:
+        def execute(self,sql,args=()):
+            self.value=({'id':100} if registered else None) if 'SELECT id FROM pg_accounts' in sql else repo
+            return self
+        def fetchone(self):
+            return self.value
+    @contextmanager
+    def connection():
+        yield DB()
+    monkeypatch.setattr(webhooks,'connect',connection)
+    class Client:
+        def close(self):
+            pass
+    class Github:
+        client=Client()
+        def __init__(self,*args):
+            pass
+        def request(self,method,path):
+            return permission if path.endswith('/permission') else {'conclusion':'failure','event':'push','head_branch':'main','head_sha':'fixture-sha','run_attempt':2}
+    monkeypatch.setattr(webhooks,'InstallationGitHub',Github)
+    enqueued=[]
+    monkeypatch.setattr(webhooks,'enqueue',lambda *args:enqueued.append(args))
+    webhooks.process(delivery('check_run',{'action':'requested_action','requested_action':{'identifier':'repair'},'sender':{'login':'writer','id':100},'check_run':{'app':{'id':51},'external_id':'run:10'}}))
+    return enqueued
+
+
+def test_native_repair_uses_the_authorized_sender_and_durable_run_key(monkeypatch):
+    result=native_action(monkeypatch,{'permission':'write','user':{'id':100}})
+    assert len(result)==1
+    assert result[0][0]['controller_id']==100
+    assert result[0][2]=='native-repair-10-2'
+
+
+@pytest.mark.parametrize('permission,registered',[
+    ({'permission':'read','user':{'id':100}},True),
+    ({'permission':'write','user':{'id':200}},True),
+    ({'permission':'write','user':{'id':100}},False),
+])
+def test_native_repair_denies_readonly_mismatched_or_unregistered_sender(monkeypatch,permission,registered):
+    assert native_action(monkeypatch,permission,registered)==[]

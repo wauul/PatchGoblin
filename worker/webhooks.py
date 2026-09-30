@@ -43,7 +43,7 @@ def reconcile_installation(installation_id):
                 for repo in repos:
                     seen.append(repo["id"])
                     db.execute(
-                        "INSERT INTO pg_repositories(id,installation_id,full_name,default_branch,private) VALUES(%s,%s,%s,%s,%s) ON CONFLICT(id) DO UPDATE SET active=true,full_name=EXCLUDED.full_name,default_branch=EXCLUDED.default_branch,private=EXCLUDED.private,updated_at=now()",
+                        "INSERT INTO pg_repositories(id,installation_id,full_name,default_branch,private) VALUES(%s,%s,%s,%s,%s) ON CONFLICT(id) DO UPDATE SET installation_id=EXCLUDED.installation_id,active=true,full_name=EXCLUDED.full_name,default_branch=EXCLUDED.default_branch,private=EXCLUDED.private,updated_at=now()",
                         (repo["id"], installation_id, repo["full_name"], repo["default_branch"], repo["private"]),
                     )
             if len(repos) < 100:

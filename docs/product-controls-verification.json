@@ -1,0 +1,93 @@
+{
+  "removed_installation": 166562115,
+  "selected_repositories": [
+    "wauul/patchgoblin-lab",
+    "wauul/patchgoblin-product-lab"
+  ],
+  "github_access_removed": true,
+  "webhook_cleanup_verified": true,
+  "installation_inactive": true,
+  "repository_memberships_removed": true,
+  "automation_disabled": true,
+  "restored_installation": 166595522,
+  "restored_repositories": [
+    "wauul/patchgoblin-lab",
+    "wauul/patchgoblin-product-lab"
+  ],
+  "restored_automation_off": true,
+  "preservation": [
+    {
+      "pr": "https://github.com/wauul/patchgoblin-lab/pull/5",
+      "head_sha": "857d52fe5edf6c7f68879b3c25c9c91556dd5d15",
+      "merged": false,
+      "changed_files": [
+        ".github/workflows/patchgoblin-maintenance.yml"
+      ],
+      "custom_python_workflow_sha256": "0efabc8e085d6d18c8c7ece64155b6b0b20d873ff85a4877c5d4503fe5a73367",
+      "custom_python_workflow_byte_identical": true
+    },
+    {
+      "pr": "https://github.com/wauul/patchgoblin-lab/pull/6",
+      "head_sha": "9b3e34f2449cc6f40c8b8a8312beffe1aa7782d8",
+      "merged": false,
+      "changed_files": [
+        "package-lock.json"
+      ],
+      "custom_python_workflow_sha256": "0efabc8e085d6d18c8c7ece64155b6b0b20d873ff85a4877c5d4503fe5a73367",
+      "custom_python_workflow_byte_identical": true
+    }
+  ],
+  "final_controls": {
+    "checked_at": "2026-09-30T17:39:23.934124+00:00",
+    "pause_denied_new_job_in_web_ui": true,
+    "disabled_status_and_actions_verified_in_popup_harness": true,
+    "repositories": [
+      {
+        "full_name": "wauul/patchgoblin-lab",
+        "active": true,
+        "enabled": true,
+        "paused": false,
+        "auto_repair": false,
+        "auto_maintenance": false,
+        "auto_builder": false,
+        "installation_id": 166595522
+      },
+      {
+        "full_name": "wauul/patchgoblin-product-lab",
+        "active": true,
+        "enabled": true,
+        "paused": false,
+        "auto_repair": false,
+        "auto_maintenance": false,
+        "auto_builder": false,
+        "installation_id": 166595522
+      }
+    ],
+    "active_jobs_or_execution_leases": 0
+  },
+  "final_public_smoke": {
+    "checked_at": "2026-09-30T17:39:23.934134+00:00",
+    "http": [
+      {
+        "url": "https://patchgoblin.vercel.app/",
+        "status": 200
+      },
+      {
+        "url": "https://patchgoblin.vercel.app/api/jobs",
+        "status": 401
+      },
+      {
+        "url": "https://patchgoblin.vercel.app/__extension_verify/",
+        "status": 404
+      },
+      {
+        "url": "https://worker-production-ac16.up.railway.app/health",
+        "status": 200
+      }
+    ],
+    "extension_sha256": "41b11fb0308788edf7d817cddd86bbf3a1d520b0bfdac633d75886acdcc6e886",
+    "extension_matches_source_build": true,
+    "mobile_workbench_viewport_width": 375,
+    "mobile_workbench_document_width": 375
+  }
+}

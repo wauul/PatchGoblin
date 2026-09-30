@@ -1,0 +1,13 @@
+{
+  "environment": "https://patchgoblin.vercel.app",
+  "account_fixture": "temporary backend session, not OAuth identity",
+  "fixture_records_removed": true,
+  "passed": 5,
+  "checks": [
+    "Public landing returns 200; anonymous jobs and client-supplied identity return 401",
+    "Invalid webhook signature is rejected",
+    "The same signed ping is accepted once and returns duplicate=true on redelivery",
+    "Real export HTTP route includes fixture data and excludes credentials and session material",
+    "Cross-origin deletion is denied; confirmed deletion removes fixture account, session and evidence; the session then returns 401"
+  ]
+}

@@ -95,4 +95,6 @@ BEGIN
  DELETE FROM pg_deliveries WHERE received_at<now()-interval '7 days' AND status IN ('done','failed');
  DELETE FROM patchgoblin_jobs j USING pg_repositories r WHERE j.repository_id=r.id AND j.created_at<now()-make_interval(days=>r.retention_days) AND j.sandbox_id IS NULL AND j.lease_token IS NULL;
  DELETE FROM patchgoblin_jobs WHERE owner_key LIKE 'deleted:%' AND sandbox_id IS NULL AND lease_token IS NULL;
+ DELETE FROM pg_repositories r WHERE NOT r.active AND r.controller_id IS NULL AND NOT EXISTS(SELECT 1 FROM pg_repository_members m WHERE m.repo_id=r.id) AND NOT EXISTS(SELECT 1 FROM patchgoblin_jobs j WHERE j.repository_id=r.id);
+ DELETE FROM pg_installations i WHERE NOT i.active AND NOT EXISTS(SELECT 1 FROM pg_repositories r WHERE r.installation_id=i.id);
 END $$;

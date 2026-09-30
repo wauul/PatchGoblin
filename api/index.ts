@@ -1,8 +1,8 @@
 import {handleProduct} from '../server/platform.js';
 
 export default {fetch(request:Request){
- // Every production URL is protected by Vercel Authentication. Do not trust
- // client-supplied identity headers on this deployment.
+ // The canonical product is public; handleProduct authenticates private routes
+ // with its GitHub session. Client-supplied hosting identity is never trusted.
  const headers=new Headers(request.headers);headers.delete('oai-authenticated-user-id');
  return handleProduct(new Request(request,{headers}),process.env);
 }};
