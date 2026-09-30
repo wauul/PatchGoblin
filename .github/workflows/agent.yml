@@ -29,14 +29,24 @@ jobs:
         with:
           version: '0.8.22'
       - run: uv sync --frozen
+      - name: Persist worker preparation
+        run: uv run --frozen python -m worker.main --preparing
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/cache@v4
         with:
           path: .local/model-runtime/qwen-coder-7b.gguf
           key: qwen-coder-7b-509287f7
       - name: Start real inference on the disposable runner
+        id: inference
         run: uv run --frozen python scripts/setup_runner_model.py
       - name: Bounded agent (credentials remain on the host)
         run: uv run --frozen python -m worker.main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Persist inference startup failure
+        if: failure() && steps.inference.outcome == 'failure'
+        run: uv run --frozen python -m worker.main --startup-failure
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4

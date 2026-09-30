@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from pathlib import Path
 from worker.agent import Agent
 from worker.github import GitHub, StateStore
@@ -21,7 +22,15 @@ def main():
             raise ValueError("Unknown request fields")
         if "ci_logs" in request and (not isinstance(request["ci_logs"], str) or len(request["ci_logs"]) > 12000):
             raise ValueError("Invalid redacted CI evidence")
-        result = agent.execute(request)
+        if "--preparing" in sys.argv:
+            result = store.previous or {**agent.state, "diagnosis":"Preparing trusted inference runtime", "events":[{"stage":"queued","message":"Preparing the pinned inference server on the trusted host"}]}
+            if not store.previous:
+                store.save(result)
+        elif "--startup-failure" in sys.argv:
+            result = {**(store.previous or agent.state), "status":"failed", "diagnosis":"Trusted inference startup failed. Inspect the worker Actions run; no repository patch was attempted."}
+            store.save(result)
+        else:
+            result = agent.execute(request)
     except (ValueError, TypeError) as exc:
         result = {**agent.state, "status":"failed", "diagnosis":redact(str(exc))[:1000]}
         store.save(result)
