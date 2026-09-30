@@ -53,15 +53,15 @@ class GitHub:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(tar.extractfile(member).read())
 
-    def ci_evidence(self, repo: str, run_id: int) -> dict:
+    def ci_evidence(self, repo: str, run_id: int, stored_logs=None) -> dict:
         from worker.security import filter_logs
         run = self.request("GET", f"/repos/{repo}/actions/runs/{run_id}")
         if run["conclusion"] != "failure":
             raise ValueError("Select a failed completed workflow run")
         jobs = self.request("GET", f"/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100")["jobs"]
         failed = [j for j in jobs if j["conclusion"] == "failure"]
-        logs = []
-        for job in failed[:2]:
+        logs = [filter_logs(stored_logs)] if isinstance(stored_logs, str) else []
+        for job in ([] if logs else failed[:2]):
             response = self.client.get(f"/repos/{repo}/actions/jobs/{job['id']}/logs")
             self.calls += 1
             if response.status_code == 302:

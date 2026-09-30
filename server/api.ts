@@ -4,6 +4,7 @@ const marker='<!-- patchgoblin-state-v1 -->\n';
 const terminal=new Set(['verified','submitted','unsupported','failed','cancelled']);
 export class ApiError extends Error {constructor(public status:number,message:string){super(message)}}
 export const redact=(s:string)=>s.replace(/(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{20,}|Bearer\s+\S+)/gi,'[REDACTED]');
+const filteredLogs=(s:string)=>redact(s.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g,'').replace(/((?:password|token|api[_-]?key|secret)\s*[=:]\s*)[^\s,;]+/gi,'$1[REDACTED]')).split('\n').filter(l=>/error|fail|conflict|requires|incompatible|ModuleNotFound|resolution|install|python|lock|dependency/i.test(l)).slice(-100).join('\n').slice(-12000);
 const response=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
 export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):Promise<Response>{
  const url=new URL(req.url), control=env.CONTROL_REPO||'wauul/PatchGoblin', ownerLogin=env.OWNER_LOGIN||'wauul';
@@ -70,7 +71,24 @@ export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):
    const recent=issues.filter((i:Json)=>{try{return issueRequest(i)&&Date.now()-Date.parse(i.created_at)<3600000}catch{return false}});
    if(recent.length>=8)throw new ApiError(429,'Eight jobs per hour maximum. Try again later.');
    for(const i of recent.filter((i:Json)=>i.state==='open')){const job=await details(i);if(!terminal.has(job.status)&&Date.now()-Date.parse(i.created_at)<1800000)throw new ApiError(409,'A job is already running. Wait for it or cancel it.');}
-   const body={repo:input.repo,mode:input.mode,run_id:input.mode==='repair'?input.run_id:null,ref:input.ref||repository.default_branch,owner,key:input.key,created_at:new Date().toISOString()};
+   let ci_logs:string|undefined;
+   if(input.mode==='repair'){
+    const run=await github(`/repos/${input.repo}/actions/runs/${input.run_id}`);
+    if(run.conclusion!=='failure')throw new ApiError(400,'Choose a failed completed workflow run.');
+    const jobs=await github(`/repos/${input.repo}/actions/runs/${input.run_id}/jobs?per_page=100`);
+    const logs:string[]=[];
+    for(const job of jobs.jobs.filter((j:Json)=>j.conclusion==='failure').slice(0,2)){
+     const r=await fetcher(`https://api.github.com/repos/${input.repo}/actions/jobs/${job.id}/logs`,{redirect:'manual',headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,Accept:'application/vnd.github+json','User-Agent':'PatchGoblin'}});
+     const location=r.headers.get('location');
+     // Never forward the repository credential to GitHub's log-storage redirect.
+     const log=r.status===302&&location?await fetcher(location,{redirect:'error'}):r;
+     if(!log.ok)throw new ApiError(502,`Cannot retrieve failed CI logs (${log.status}).`);
+     logs.push(filteredLogs(await log.text()));
+    }
+    if(!logs.length)throw new ApiError(400,'The selected run has no failed job logs.');
+    ci_logs=logs.join('\n').slice(-12000);
+   }
+   const body={repo:input.repo,mode:input.mode,run_id:input.mode==='repair'?input.run_id:null,ref:input.ref||repository.default_branch,owner,key:input.key,created_at:new Date().toISOString(),...(ci_logs===undefined?{}:{ci_logs})};
    const issue=await github(`/repos/${control}/issues`,'POST',{title:`PatchGoblin job ${input.mode} ${input.key}`,body:JSON.stringify(body)});
    return response(await details(issue),201);
   }

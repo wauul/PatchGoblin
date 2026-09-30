@@ -13,3 +13,23 @@ test('backend never returns provider credentials on error',async()=>{const r=awa
 test('missing integration produces honest connection state',async()=>{const r=await handleApi(request('/bootstrap'),{});const state=await r.json();assert.equal(state.connected,false)});
 test('unverified work cannot submit',async()=>{const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('alice|wauul/PatchGoblin'));const owner=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);const fetcher=async(url:any)=>String(url).includes('/comments')?json([]):json({number:7,state:'open',title:'PatchGoblin job builder abc',body:JSON.stringify({owner,repo:'wauul/patchgoblin-lab'}),user:{login:'wauul'}});const r=await handleApi(request('/jobs/7/submit',{}),env,fetcher as typeof fetch);assert.equal(r.status,409)});
 test('secret redaction covers token-like values',()=>{assert.equal(redact('ghp_'+'a'.repeat(30)),'[REDACTED]')});
+test('CI log redirect receives no credential and persisted evidence is redacted',async()=>{
+ let issue:any, redirected=false;
+ const fetcher=async(url:any,options:any)=>{
+  const path=String(url);
+  if(path==='https://logs.example/file'){redirected=true;assert.equal(options.headers,undefined);return new Response('ERROR token=private-value\nModuleNotFoundError: requests\nBearer sensitive-value');}
+  if(path.endsWith('/user'))return json({login:'wauul'});
+  if(path.endsWith('/repos/wauul/patchgoblin-lab'))return json({permissions:{push:true},private:false,default_branch:'main'});
+  if(path.includes('/issues?'))return json([]);
+  if(path.endsWith('/actions/runs/7'))return json({conclusion:'failure'});
+  if(path.includes('/jobs?'))return json({jobs:[{id:9,conclusion:'failure'}]});
+  if(path.endsWith('/actions/jobs/9/logs'))return new Response(null,{status:302,headers:{Location:'https://logs.example/file'}});
+  if(path.endsWith('/issues')&&options.method==='POST'){issue={...JSON.parse(options.body),number:8,state:'open',user:{login:'wauul'}};return json(issue);}
+  if(path.endsWith('/comments?per_page=100'))return json([]);
+  throw Error('Unexpected request '+path);
+ };
+ const r=await handleApi(request('/jobs',{repo:'wauul/patchgoblin-lab',mode:'repair',run_id:7,key:'1234567890123456'}),env,fetcher as typeof fetch);
+ assert.equal(r.status,201);assert.equal(redirected,true);
+ const stored=JSON.parse(issue.body);assert.ok(stored.ci_logs.includes('ModuleNotFoundError'));
+ assert.ok(!stored.ci_logs.includes('private-value'));assert.ok(!stored.ci_logs.includes('sensitive-value'));
+});

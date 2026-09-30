@@ -52,7 +52,8 @@ class Agent:
             metadata = self.github.request("GET", f"/repos/{repo}")
             if metadata.get("private"):
                 raise Unsupported("This free deployment supports allowlisted public repositories; private archives require a GitHub App installation")
-            ci = self.github.ci_evidence(repo, int(request["run_id"])) if mode == "repair" else None
+            ci = (self.github.ci_evidence(repo, int(request["run_id"]), stored_logs=request["ci_logs"])
+                  if "ci_logs" in request else self.github.ci_evidence(repo, int(request["run_id"]))) if mode == "repair" else None
             branch = ci["branch"] if ci else request.get("ref", metadata["default_branch"])
             commit = self.github.request("GET", f"/repos/{repo}/commits/{branch}")
             sha = ci["sha"] if ci else commit["sha"]
