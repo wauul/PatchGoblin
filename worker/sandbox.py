@@ -20,6 +20,9 @@ class Sandbox:
         self.active = None
         self.calls = 0
         self.ready = False
+        uid = os.getuid() if os.name != "nt" else 65534
+        gid = os.getgid() if os.name != "nt" else 65534
+        self.user = f"{uid if uid else 65534}:{gid if gid else 65534}"
 
     def docker(self, args: list[str], timeout=120) -> subprocess.CompletedProcess:
         self.calls += 1
@@ -54,9 +57,6 @@ pid_filename /tmp/squid.pid
         self.docker(["run", "-d", "--name", self.proxy, "--memory=128m", "--cpus=.5", "--pids-limit=64",
                      "-v", f"{conf}:/etc/squid/squid.conf:ro", "ubuntu/squid:6.10-24.10_beta"])
         self.docker(["network", "connect", "--alias", "package-proxy", self.network, self.proxy])
-        if os.name != "nt":
-            for p in [self.root, *self.root.rglob("*")]:
-                os.chown(p, 65534, 65534)
         self.ready = True
 
     def run(self, command: str, python: str, install=False) -> dict:
@@ -80,7 +80,7 @@ pid_filename /tmp/squid.pid
         self.active = self.id + "-run"
         args = ["docker", "run", "--rm", "--name", self.active, "--read-only", "--cap-drop=ALL",
                 "--security-opt=no-new-privileges", "--memory=512m", "--cpus=1", "--pids-limit=128",
-                "--user=65534:65534", "--tmpfs=/tmp:rw,noexec,nosuid,size=128m", "--network", self.network if install else "none",
+                "--user=" + self.user, "--tmpfs=/tmp:rw,noexec,nosuid,size=128m", "--network", self.network if install else "none",
                 "-v", f"{self.root}:/workspace:rw", "-w", "/workspace", "-e", "HOME=/tmp",
                 "-e", "UV_CACHE_DIR=/tmp/uv-cache", "-e", "UV_PYTHON_DOWNLOADS=never"]
         if install:

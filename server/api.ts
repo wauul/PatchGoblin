@@ -1,4 +1,4 @@
-export interface Env { GITHUB_TOKEN?:string; CONTROL_REPO?:string; ALLOWED_REPOS?:string; OWNER_LOGIN?:string; LOCAL_USER?:string }
+export interface Env { GITHUB_TOKEN?:string; CONTROL_REPO?:string; ALLOWED_REPOS?:string; OWNER_LOGIN?:string; LOCAL_USER?:string; PRIVATE_OWNER_MODE?:string }
 type Json = Record<string, any>;
 const marker='<!-- patchgoblin-state-v1 -->\n';
 const terminal=new Set(['verified','submitted','unsupported','failed','cancelled']);
@@ -7,7 +7,9 @@ export const redact=(s:string)=>s.replace(/(?:gh[pousr]_[A-Za-z0-9_]{20,}|github
 const response=(body:any,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
 export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):Promise<Response>{
  const url=new URL(req.url), control=env.CONTROL_REPO||'wauul/PatchGoblin', ownerLogin=env.OWNER_LOGIN||'wauul';
- const user=req.headers.get('oai-authenticated-user-id')||(url.hostname==='127.0.0.1'?env.LOCAL_USER:undefined);
+ // In confirmed owner-private Sites, dispatch authenticates both the owner and service credentials.
+ // This adapter must NEVER be enabled for a public/shared deployment.
+ const user=env.PRIVATE_OWNER_MODE==='true'?'private-owner':req.headers.get('oai-authenticated-user-id')||(url.hostname==='127.0.0.1'?env.LOCAL_USER:undefined);
  if(!user)return response({error:'Sign in to access your repositories and jobs.'},401);
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(user+'|'+control));
  const owner=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);

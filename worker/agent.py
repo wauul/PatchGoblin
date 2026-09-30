@@ -1,4 +1,5 @@
 import difflib
+import hashlib
 import os
 import tempfile
 import time
@@ -59,6 +60,7 @@ class Agent:
             with tempfile.TemporaryDirectory(prefix="patchgoblin-") as directory:
                 root = Path(directory)
                 self.github.download(repo, sha, root)
+                protected = {p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob("*") if p.is_file()}
                 project = inspect(root)
                 self.state["project"] = {k:v for k,v in project.items() if k not in {"files","workflows"}}
                 if not project["has_tests"]:
@@ -149,6 +151,9 @@ class Agent:
                     shutil.rmtree(root / ".venv", ignore_errors=True)
                     results = self.run_commands(sandbox, python, commands)
                     self.state["verification"] = results
+                    for p, digest in protected.items():
+                        if p not in files and (not (root / p).is_file() or hashlib.sha256((root / p).read_bytes()).hexdigest() != digest):
+                            raise ValueError("Repository execution changed protected source or validation files")
                     if results and all(r["exit_code"] == 0 for r in results) and len(results) == len(commands):
                         self.state["status"] = "verified"
                         self.state["limitations"].append("Sandbox checks verified. Remote pull-request CI must be confirmed separately.")

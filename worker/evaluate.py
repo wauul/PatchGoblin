@@ -147,6 +147,8 @@ def baseline(root, case):
             sb.close()
     except Unsupported:
         return "unsupported"
+    except Exception as exc:
+        return "blocked: " + type(exc).__name__
 
 
 def main():
