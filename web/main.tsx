@@ -14,10 +14,11 @@ function App(){
  const refreshHistory=useCallback(async()=>{try{setHistory(await api('/jobs'));}catch{}},[]);
  useEffect(()=>{api('/bootstrap').then(data=>{setBootstrap(data);if(data.repositories?.length)setRepo(data.repositories[0].name);if(data.connected)refreshHistory();}).catch(e=>setError(e.message));},[refreshHistory]);
  useEffect(()=>{if(!repo||!bootstrap?.connected)return;setRuns([]);setRun('');api('/runs?repo='+encodeURIComponent(repo)).then(data=>{setRuns(data);if(data.length)setRun(String(data[0].id));}).catch(e=>setError(e.message));},[repo,bootstrap?.connected]);
- useEffect(()=>{if(!job?.id||demo||finished.includes(job.status))return;let disposed=false;
+ const remotePending=job?.status==='submitted'&&(!job.remote_ci?.length||job.remote_ci.some((r:any)=>r.status!=='completed'))&&Date.now()-Date.parse(job.created_at)<1800000;
+ useEffect(()=>{if(!job?.id||demo||(finished.includes(job.status)&&!remotePending))return;let disposed=false;
   const tick=async()=>{try{let next=await api(`/jobs/${job.id}/sync`,{});if(next.status==='verified')next=await api(`/jobs/${job.id}/submit`,{});if(!disposed)setJob(next);}catch(e){if(!disposed)setError((e as Error).message);}};
   const timer=setInterval(tick,8000);return()=>{disposed=true;clearInterval(timer);};
- },[job?.id,job?.status,demo]);
+ },[job?.id,job?.status,job?.remote_ci?.map((r:any)=>r.status+':'+r.conclusion).join('|'),remotePending,demo]);
  async function start(){setBusy(true);setError('');setDemo(false);try{const key=crypto.randomUUID();const next=await api('/jobs',{repo,mode,run_id:mode==='repair'?Number(run):null,ref,key});setJob(next);setTab('diagnosis');refreshHistory();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  async function load(id:number){setError('');try{setJob(await api('/jobs/'+id));setDemo(false);setPage('workbench');}catch(e){setError((e as Error).message);}}
  async function cancel(){try{await api(`/jobs/${job!.id}/cancel`,{});setJob({...job,status:'cancelled'});refreshHistory();}catch(e){setError((e as Error).message);}}
