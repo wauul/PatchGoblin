@@ -1,0 +1,278 @@
+{
+  "recorded_at": "2026-09-30T13:59:14.178693+00:00",
+  "production_url": "https://patchgoblin.vercel.app",
+  "implementation_commit": "8184c9f11c573a9eae04d6f4b39e93278aafd65b",
+  "cutover_commit": "a9dfb5623ce6b28a7805e10d086c1031bd659fb3",
+  "providers": {
+    "web_api": "Vercel Hobby / Node 24",
+    "inference": "Groq Free / openai/gpt-oss-20b",
+    "database": "Neon Free / PostgreSQL 18",
+    "worker": "Railway existing Hobby / sleeping service"
+  },
+  "legacy_jobs_imported": 8,
+  "tests": {
+    "python": 42,
+    "api_and_entry": 13,
+    "typescript_and_build": "passed",
+    "ruff": "passed"
+  },
+  "database_live_checks": [
+    "owner isolation",
+    "idempotency",
+    "single exclusive claim",
+    "cancellation write guard",
+    "expired job recovery",
+    "terminal state preservation"
+  ],
+  "database_test_records": "rolled back",
+  "anonymous_vercel_alias_status": 302,
+  "anonymous_vercel_unique_url_status": 302,
+  "unauthenticated_worker_wake_status": 401,
+  "legacy_job_creation_status": 410,
+  "legacy_bootstrap": {
+    "status": 200,
+    "production_url": "https://patchgoblin.vercel.app"
+  },
+  "credentials_in_staged_source_or_browser_assets": false,
+  "live_sandboxes_after_cancellation": [],
+  "cancelled_job_restored_from_deep_link": 13,
+  "jobs": [
+    {
+      "id": 10,
+      "repo": "wauul/patchgoblin-lab",
+      "mode": "builder",
+      "status": "submitted",
+      "sha": "9ab5d6c349a012337c25c7a1d4ff533e062fc01a",
+      "base_ref": "main",
+      "diagnosis": "No changes required",
+      "pr_url": "https://github.com/wauul/patchgoblin-lab/pull/3",
+      "pr_sha": "cca750c5c8bcf9f83ead5113eeb5adc7a7ec7b69",
+      "remote_ci": [
+        {
+          "name": "Python CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/wauul/patchgoblin-lab/actions/runs/36722529850"
+        },
+        {
+          "name": "Python CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/wauul/patchgoblin-lab/actions/runs/36722521902"
+        }
+      ],
+      "metrics": {
+        "model": "openai/gpt-oss-20b",
+        "provider": "groq",
+        "cost_note": "Estimate uses published GPT-OSS-20B token list rates; actual account charges are unavailable. Production uses the Groq free tier.",
+        "tool_calls": 14,
+        "model_calls": 1,
+        "model_tokens": 1341,
+        "prompt_tokens": 1092,
+        "patch_attempts": 1,
+        "duration_seconds": 46.95,
+        "completion_tokens": 249,
+        "estimated_cost_usd": 0.000157
+      },
+      "reproduction": null,
+      "verification": [
+        {
+          "logs": "Collecting requests==2.32.3 (from -r requirements.txt (line 1))\n  Downloading requests-2.32.3-py3-none-any.whl.metadata (4.6 kB)\nCollecting pytest==8.3.5 (from -r requirements.txt (line 2))\n  Downloading pytest-8.3.5-py3-none-any.whl.metadata (7.6 kB)\nCollecting charset-normalizer<4,>=2 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 46.4/46.4 kB 3.8 MB/s eta 0:00:00\nCollecting idna<4,>=2.5 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)\nCollecting urllib3<3,>=1.21.1 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)\nCollecting certifi>=2017.4.17 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)\nCollecting iniconfig (from pytest==8.3.5->-r requirements.txt (line 2))\n  Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)\nCollecting packaging (from pytest==8.3.5->-r requirements.txt (line 2))\n  Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)\nCollecting pluggy<2,>=1.5 (from pytest==8.3.5->-r requirements.txt (line 2))\n  Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)\nDownloading requests-2.32.3-py3-none-any.whl (64 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 64.9/64.9 kB 18.4 MB/s eta 0:00:00\nDownloading pytest-8.3.5-py3-none-any.whl (343 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 343.6/343.6 kB 21.7 MB/s eta 0:00:00\nDownloading certifi-2026.7.22-py3-none-any.whl (136 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 137.0/137.0 kB 104.9 MB/s eta 0:00:00\nDownloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (269 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 270.0/270.0 kB 109.9 MB/s eta 0:00:00\nDownloading idna-3.20-py3-none-any.whl (69 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 69.6/69.6 kB 119.0 MB/s eta 0:00:00\nDownloading pluggy-1.6.0-py3-none-any.whl (20 kB)\nDownloading urllib3-2.8.0-py3-none-any.whl (135 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 135.7/135.7 kB 230.5 MB/s eta 0:00:00\nDownloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)\nDownloading packaging-26.3-py3-none-any.whl (129 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 130.0/130.0 kB 177.6 MB/s eta 0:00:00\nInstalling collected packages: urllib3, pluggy, packaging, iniconfig, idna, charset-normalizer, certifi, requests, pytest\nSuccessfully installed certifi-2026.7.22 charset-normalizer-3.5.2 idna-3.20 iniconfig-2.3.0 packaging-26.3 pluggy-1.6.0 pytest-8.3.5 requests-2.32.3 urllib3-2.8.0\n\n[notice] A new release of pip is available: 24.0 -> 26.2.1\n[notice] To update, run: pip install --upgrade pip",
+          "command": "python -m pip install -r requirements.txt",
+          "network": "PyPI-only proxy",
+          "exit_code": 0,
+          "duration_seconds": 4
+        },
+        {
+          "logs": "============================= test session starts ==============================\nplatform linux -- Python 3.11.16, pytest-8.3.5, pluggy-1.6.0\nrootdir: /workspace\ncollected 6 items\n\ntests/test_weather.py ......                                             [100%]\n\n============================== 6 passed in 0.05s ===============================",
+          "command": "python -m pytest",
+          "network": "disabled",
+          "exit_code": 0,
+          "duration_seconds": 1
+        }
+      ],
+      "events": [
+        {
+          "at": 1790775166.6650374,
+          "stage": "inspect",
+          "message": "Reading immutable repository metadata and CI evidence"
+        },
+        {
+          "at": 1790775169.4317486,
+          "stage": "reproduce",
+          "message": "Confirming CI is absent and inspecting the existing project checks"
+        },
+        {
+          "at": 1790775171.4627633,
+          "stage": "investigate",
+          "message": "Selecting an evidence-backed investigation or minimal patch"
+        },
+        {
+          "at": 1790775174.1178744,
+          "stage": "patch",
+          "message": "Applying candidate 1 within the dependency/workflow allowlist"
+        },
+        {
+          "at": 1790775176.1604555,
+          "stage": "verify",
+          "message": "Running patched installation, then every original required check"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "repo": "wauul/patchgoblin-lab",
+      "mode": "repair",
+      "status": "submitted",
+      "sha": "4f3ed4a7f29b3acf065ea035b9b68c1a28c21df2",
+      "base_ref": "broken-install",
+      "diagnosis": "Conflict between requests==2.32.3 and urllib3==1.20. Adjust urllib3 to a compatible range.",
+      "pr_url": "https://github.com/wauul/patchgoblin-lab/pull/4",
+      "pr_sha": "eb4828b59d9f30d2e88690629a787a823090f640",
+      "remote_ci": [
+        {
+          "name": "Python CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/wauul/patchgoblin-lab/actions/runs/36722757968"
+        },
+        {
+          "name": "Python CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/wauul/patchgoblin-lab/actions/runs/36722750104"
+        }
+      ],
+      "metrics": {
+        "model": "openai/gpt-oss-20b",
+        "provider": "groq",
+        "cost_note": "Estimate uses published GPT-OSS-20B token list rates; actual account charges are unavailable. Production uses the Groq free tier.",
+        "tool_calls": 21,
+        "model_calls": 2,
+        "model_tokens": 5576,
+        "prompt_tokens": 5048,
+        "patch_attempts": 2,
+        "duration_seconds": 59.86,
+        "completion_tokens": 528,
+        "estimated_cost_usd": 0.000537
+      },
+      "reproduction": [
+        {
+          "logs": "Collecting idna<4,>=2.5 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)\nINFO: pip is looking at multiple versions of requests to determine which version is compatible with other requirements. This could take a while.\nERROR: Cannot install -r requirements.txt (line 1) and urllib3==1.20 because these package versions have conflicting dependencies.\n\nThe conflict is caused by:\n    The user requested urllib3==1.20\n    requests 2.32.3 depends on urllib3<3 and >=1.21.1\n\nTo fix this you could try to:\n1. loosen the range of package versions you've specified\n2. remove package versions to allow pip attempt to solve the dependency conflict\n\nERROR: ResolutionImpossible: for help visit https://pip.pypa.io/en/latest/topics/dependency-resolution/#dealing-with-dependency-conflicts\n\n[notice] A new release of pip is available: 24.0 -> 26.2.1\n[notice] To update, run: pip install --upgrade pip",
+          "command": "python -m pip install -r requirements.txt",
+          "network": "PyPI-only proxy",
+          "exit_code": 1,
+          "duration_seconds": 4
+        }
+      ],
+      "verification": [
+        {
+          "logs": "Collecting requests==2.32.3 (from -r requirements.txt (line 1))\n  Downloading requests-2.32.3-py3-none-any.whl.metadata (4.6 kB)\nCollecting urllib3<3,>=1.21.1 (from -r requirements.txt (line 2))\n  Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)\nCollecting pytest==8.3.5 (from -r requirements.txt (line 3))\n  Downloading pytest-8.3.5-py3-none-any.whl.metadata (7.6 kB)\nCollecting charset-normalizer<4,>=2 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)\n     \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 46.4/46.4 kB 3.8 MB/s eta 0:00:00\nCollecting idna<4,>=2.5 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)\nCollecting certifi>=2017.4.17 (from requests==2.32.3->-r requirements.txt (line 1))\n  Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)\nCollecting iniconfig (from pytest==8.3.5->-r requirements.txt (line 3))\n  Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)\nCollecting packaging (from pytest==8.3.5->-r requirements.txt (line 3))\n  Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)\nCollecting pluggy<2,>=1.5 (from pytest==8.3.5->-r requirements.txt (line 3))\n  Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)\nDownloading requests-2.32.3-py3-none-any.whl (64 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 64.9/64.9 kB 14.5 MB/s eta 0:00:00\nDownloading pytest-8.3.5-py3-none-any.whl (343 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 343.6/343.6 kB 21.3 MB/s eta 0:00:00\nDownloading urllib3-2.8.0-py3-none-any.whl (135 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 135.7/135.7 kB 131.4 MB/s eta 0:00:00\nDownloading certifi-2026.7.22-py3-none-any.whl (136 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 137.0/137.0 kB 143.0 MB/s eta 0:00:00\nDownloading charset_normalizer-3.5.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (269 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 270.0/270.0 kB 89.6 MB/s eta 0:00:00\nDownloading idna-3.20-py3-none-any.whl (69 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 69.6/69.6 kB 141.0 MB/s eta 0:00:00\nDownloading pluggy-1.6.0-py3-none-any.whl (20 kB)\nDownloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)\nDownloading packaging-26.3-py3-none-any.whl (129 kB)\n   \u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501 130.0/130.0 kB 153.9 MB/s eta 0:00:00\nInstalling collected packages: urllib3, pluggy, packaging, iniconfig, idna, charset-normalizer, certifi, requests, pytest\nSuccessfully installed certifi-2026.7.22 charset-normalizer-3.5.2 idna-3.20 iniconfig-2.3.0 packaging-26.3 pluggy-1.6.0 pytest-8.3.5 requests-2.32.3 urllib3-2.8.0\n\n[notice] A new release of pip is available: 24.0 -> 26.2.1\n[notice] To update, run: pip install --upgrade pip",
+          "command": "python -m pip install -r requirements.txt",
+          "network": "PyPI-only proxy",
+          "exit_code": 0,
+          "duration_seconds": 4
+        },
+        {
+          "logs": "============================= test session starts ==============================\nplatform linux -- Python 3.11.16, pytest-8.3.5, pluggy-1.6.0\nrootdir: /workspace\ncollected 6 items\n\ntests/test_weather.py ......                                             [100%]\n\n============================== 6 passed in 0.05s ===============================",
+          "command": "python -m pytest",
+          "network": "disabled",
+          "exit_code": 0,
+          "duration_seconds": 1
+        }
+      ],
+      "events": [
+        {
+          "at": 1790775264.5522296,
+          "stage": "inspect",
+          "message": "Reading immutable repository metadata and CI evidence"
+        },
+        {
+          "at": 1790775268.3029785,
+          "stage": "reproduce",
+          "message": "Running the original workflow commands in a disposable sandbox"
+        },
+        {
+          "at": 1790775301.487746,
+          "stage": "investigate",
+          "message": "Selecting an evidence-backed investigation or minimal patch"
+        },
+        {
+          "at": 1790775304.212012,
+          "stage": "investigate",
+          "message": "Candidate rejected by patch policy: Existing dependencies cannot be removed"
+        },
+        {
+          "at": 1790775306.3057044,
+          "stage": "investigate",
+          "message": "Selecting an evidence-backed investigation or minimal patch"
+        },
+        {
+          "at": 1790775309.0986242,
+          "stage": "patch",
+          "message": "Applying candidate 2 within the dependency/workflow allowlist"
+        },
+        {
+          "at": 1790775311.1586905,
+          "stage": "verify",
+          "message": "Running patched installation, then every original required check"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "repo": "wauul/patchgoblin-lab",
+      "mode": "builder",
+      "status": "cancelled",
+      "sha": "9ab5d6c349a012337c25c7a1d4ff533e062fc01a",
+      "base_ref": "main",
+      "diagnosis": "Job cancelled",
+      "pr_url": null,
+      "pr_sha": null,
+      "remote_ci": null,
+      "metrics": {
+        "model": "openai/gpt-oss-20b",
+        "provider": "groq",
+        "cost_note": "Estimate uses published GPT-OSS-20B token list rates; actual account charges are unavailable. Production uses the Groq free tier.",
+        "tool_calls": 3,
+        "model_calls": 1,
+        "model_tokens": 1412,
+        "prompt_tokens": 1123,
+        "duration_seconds": 36.72,
+        "completion_tokens": 289,
+        "estimated_cost_usd": 0.000171
+      },
+      "reproduction": null,
+      "verification": [],
+      "events": [
+        {
+          "at": 1790776169.91563,
+          "stage": "inspect",
+          "message": "Reading immutable repository metadata and CI evidence"
+        },
+        {
+          "at": 1790776170.8712292,
+          "stage": "reproduce",
+          "message": "Confirming CI is absent and inspecting the existing project checks"
+        },
+        {
+          "at": 1790776170.9309516,
+          "stage": "investigate",
+          "message": "Selecting an evidence-backed investigation or minimal patch"
+        },
+        {
+          "at": 1790776171.5348725,
+          "stage": "patch",
+          "message": "Applying candidate 1 within the dependency/workflow allowlist"
+        },
+        {
+          "at": 1790776171.6007338,
+          "stage": "verify",
+          "message": "Running patched installation, then every original required check"
+        }
+      ]
+    }
+  ],
+  "cost_scope": "Model token estimates use list rates, not actual charges or total infrastructure cost. Railway uses existing included usage/credits.",
+  "evaluation_scope": "Two live hosted success flows plus real cancellation. Historical 12-case Qwen results are not Groq results."
+}
