@@ -1,7 +1,7 @@
 import {readFile,readdir} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 const secrets=[];
-for(const file of ['.env','.local/neon.env','.local/groq.env','.local/railway.env','.local/github-app.env','.local/product-ops.env']){
+for(const file of ['.env','.local/neon.env','.local/groq.env','.local/railway.env','.local/github-app.env','.local/github-oauth.env','.local/product-ops.env']){
  try{for(const line of (await readFile(file,'utf8')).split(/\r?\n/)){const m=line.match(/^([A-Z_]+)=(.*)$/);if(m&&/TOKEN|SECRET|PRIVATE_KEY|ENCRYPTION_KEY|DATABASE_URL|API_KEY/.test(m[1])){const value=m[2].replace(/^['"]|['"]$/g,'');if(value.length>12)secrets.push({name:m[1],value});}}}catch{}
 }
 const staged=execFileSync('git',['diff','--cached','--text'],{encoding:'utf8',maxBuffer:5_000_000});

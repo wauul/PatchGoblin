@@ -4,6 +4,9 @@ CREATE TABLE IF NOT EXISTS pg_accounts (
  onboarding_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE pg_accounts ADD COLUMN IF NOT EXISTS refresh_lease_until timestamptz;
+-- Sign-in uses a separate identity-only OAuth App. These nullable credentials
+-- belong exclusively to the explicitly authorized repository GitHub App.
+ALTER TABLE pg_accounts ALTER COLUMN credentials DROP NOT NULL;
 CREATE TABLE IF NOT EXISTS pg_sessions (
  token_hash text PRIMARY KEY, account_id bigint NOT NULL REFERENCES pg_accounts ON DELETE CASCADE,
  csrf text NOT NULL, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
@@ -12,6 +15,8 @@ CREATE TABLE IF NOT EXISTS pg_oauth_states (
  state_hash text PRIMARY KEY, browser_hash text NOT NULL, verifier text NOT NULL, return_to text NOT NULL,
  expires_at timestamptz NOT NULL
 );
+ALTER TABLE pg_oauth_states ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'legacy';
+ALTER TABLE pg_oauth_states ADD COLUMN IF NOT EXISTS account_id bigint;
 CREATE TABLE IF NOT EXISTS pg_installations (
  id bigint PRIMARY KEY, account_login text NOT NULL, account_type text NOT NULL,
  active boolean NOT NULL DEFAULT true, updated_at timestamptz NOT NULL DEFAULT now()
@@ -81,6 +86,7 @@ BEGIN
  UPDATE pg_repositories SET auto_repair=false,auto_builder=false,auto_maintenance=false,controller_id=NULL WHERE controller_id=p_account;
  UPDATE patchgoblin_jobs SET cancelled_at=now(),status='cancelled',request='{}',state='{}',owner_key='deleted:'||id WHERE account_id=p_account;
  DELETE FROM pg_accounts WHERE id=p_account;
+ DELETE FROM patchgoblin_jobs WHERE owner_key LIKE 'deleted:%' AND sandbox_id IS NULL AND lease_token IS NULL;
 END $$;
 
 CREATE OR REPLACE FUNCTION pg_retention() RETURNS void LANGUAGE plpgsql AS $$

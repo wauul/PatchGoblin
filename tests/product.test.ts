@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {handleProduct} from '../server/platform.ts';
-import {encrypt,decrypt,validSignature,localReturn,hash} from '../server/platform-core.ts';
+import {Product,encrypt,decrypt,validSignature,localReturn,hash} from '../server/platform-core.ts';
 const env={APP_URL:'https://patchgoblin.vercel.app',TOKEN_ENCRYPTION_KEY:'12'.repeat(32),GITHUB_WEBHOOK_SECRET:'unit-test-secret',WORKER_URL:'https://worker.invalid',WORKER_WAKE_TOKEN:'test'};
 const never=async()=>{throw Error('Unexpected provider call');};
 test('product authentication ignores owner flags and client-supplied identities',async()=>{
@@ -49,4 +49,31 @@ test('session and origin checks deny mutation before data is modified',async()=>
 test('a consumed OAuth state or different browser cannot exchange a code',async()=>{
  const response=await handleProduct(new Request(env.APP_URL+'/api/auth/callback?code=not-used&state=old',{headers:{cookie:'__Host-pg-oauth=different-browser'}}),env,never as typeof fetch,async()=>[]);
  assert.equal(response.status,302);assert.ok(response.headers.get('location')!.startsWith('/?auth_error='));
+});
+test('sign-in uses the dedicated identity OAuth App without repository scopes',async()=>{
+ let purpose='';
+ const response=await handleProduct(new Request(env.APP_URL+'/api/auth/login'),{...env,GITHUB_OAUTH_CLIENT_ID:'identity-client',GITHUB_CLIENT_ID:'repository-client'},never as typeof fetch,async(sql)=>{purpose=sql;return [];});
+ const location=new URL(response.headers.get('location')!);
+ assert.equal(location.searchParams.get('client_id'),'identity-client');assert.equal(location.searchParams.get('scope'),'');
+ assert.equal(location.searchParams.get('code_challenge_method'),'S256');assert.ok(purpose.includes("'identity'"));
+});
+test('identity-only login does not store a token or grant repository authorization',async()=>{
+ const statements:string[]=[];
+ const query=async(sql:string)=>{statements.push(sql);return sql.startsWith('DELETE FROM pg_oauth_states')?[{purpose:'identity',verifier:'test-verifier',return_to:'/dashboard'}]:[];};
+ const fetcher=async(url:any,options:any)=>{if(String(url).endsWith('/access_token')){assert.equal(JSON.parse(options.body).client_id,'identity-client');return Response.json({access_token:'identity-only',expires_in:28800});}assert.equal(String(url),'https://api.github.com/user');return Response.json({id:123,login:'example',avatar_url:''});};
+ const response=await handleProduct(new Request(env.APP_URL+'/api/auth/callback?code=one-time&state=state',{headers:{cookie:'__Host-pg-oauth=browser'}}),{...env,GITHUB_OAUTH_CLIENT_ID:'identity-client'},fetcher as typeof fetch,query);
+ assert.equal(response.status,302);const accountInsert=statements.find(s=>s.startsWith('INSERT INTO pg_accounts'))!;
+ assert.ok(!accountInsert.includes('credentials'));assert.ok(!statements.some(s=>s.includes('pg_repository_members')));
+ assert.ok(response.headers.get('set-cookie')!.includes('__Host-pg-session='));
+});
+test('repository authorization cannot connect another GitHub identity to the session',async()=>{
+ let writes=0;
+ const query=async(sql:string)=>{if(sql.startsWith('DELETE FROM pg_oauth_states'))return [{purpose:'installation',account_id:123,verifier:'v'}];if(sql.startsWith('SELECT a.'))return [{id:123,login:'example'}];writes++;return [];};
+ const fetcher=async(url:any)=>Response.json(String(url).endsWith('/access_token')?{access_token:'app-token'}:{id:456,login:'different'});
+ const response=await handleProduct(new Request(env.APP_URL+'/api/auth/callback?code=one-time&state=state',{headers:{cookie:'__Host-pg-oauth=browser; __Host-pg-session=session'}}),env,fetcher as typeof fetch,query);
+ assert.equal(response.status,403);assert.equal(writes,0);
+});
+test('identity-only accounts must explicitly authorize repository access',async()=>{
+ const product=new Product(env,never as typeof fetch,never);
+ await assert.rejects(product.userToken({id:123,credentials:null}),/Authorize selected repository access/);
 });

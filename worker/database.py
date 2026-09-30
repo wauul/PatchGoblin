@@ -30,7 +30,7 @@ class DatabaseStore:
         if len(text.encode())>250000:
             raise ValueError("Job state exceeds the durable storage budget")
         with connect() as db:
-            updated=db.execute("UPDATE patchgoblin_jobs SET state=%s::jsonb,status=%s,updated_at=now() WHERE id=%s AND lease_token=%s AND lease_expires_at>now() AND (cancelled_at IS NULL OR %s='cancelled') RETURNING id",(text,state["status"],self.id,self.lease,state['status'])).fetchone()
+            updated=db.execute("UPDATE patchgoblin_jobs SET state=%s::jsonb,status=%s,updated_at=now() WHERE id=%s AND lease_token=%s AND lease_expires_at>now() AND owner_key NOT LIKE 'deleted:%%' AND (cancelled_at IS NULL OR %s='cancelled') RETURNING id",(text,state["status"],self.id,self.lease,state['status'])).fetchone()
             if not updated and not self.cancelled(force=True):
                 raise InterruptedError("Worker no longer owns this job lease")
 

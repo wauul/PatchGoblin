@@ -30,19 +30,29 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
    if(!env.CRON_SECRET||req.headers.get('authorization')!=='Bearer '+env.CRON_SECRET)throw new ProductError(401,'Unauthorized');await sql('SELECT pg_retention()');await product.wake();return json({ok:true});
   }
   if(path==='/api/auth/login'&&req.method==='GET'){
-   if(!env.GITHUB_CLIENT_ID)throw new ProductError(503,'GitHub login is not configured.');
+   if(!env.GITHUB_OAUTH_CLIENT_ID)throw new ProductError(503,'GitHub login is not configured.');
    const state=random(),browser=random(),verifier=random();
-   await sql("INSERT INTO pg_oauth_states(state_hash,browser_hash,verifier,return_to,expires_at) VALUES($1,$2,$3,$4,now()+interval '10 minutes')",[hash(state),hash(browser),verifier,localReturn(url.searchParams.get('return_to'))]);
-   const target=new URL('https://github.com/login/oauth/authorize');target.searchParams.set('client_id',env.GITHUB_CLIENT_ID);target.searchParams.set('redirect_uri',origin+'/api/auth/callback');target.searchParams.set('state',state);target.searchParams.set('code_challenge',Buffer.from(hash(verifier),'hex').toString('base64url'));target.searchParams.set('code_challenge_method','S256');
+   await sql("INSERT INTO pg_oauth_states(state_hash,browser_hash,verifier,return_to,purpose,expires_at) VALUES($1,$2,$3,$4,'identity',now()+interval '10 minutes')",[hash(state),hash(browser),verifier,localReturn(url.searchParams.get('return_to'))]);
+   const target=new URL('https://github.com/login/oauth/authorize');target.searchParams.set('client_id',env.GITHUB_OAUTH_CLIENT_ID);target.searchParams.set('scope','');target.searchParams.set('redirect_uri',origin+'/api/auth/callback');target.searchParams.set('state',state);target.searchParams.set('code_challenge',Buffer.from(hash(verifier),'hex').toString('base64url'));target.searchParams.set('code_challenge_method','S256');
    return redirect(target.toString(),cookie('__Host-pg-oauth',browser,600));
   }
   if(path==='/api/auth/callback'&&req.method==='GET'){
    const state=url.searchParams.get('state')||'',browser=cookies(req)['__Host-pg-oauth']||'';
    const row=(await sql('DELETE FROM pg_oauth_states WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>now() RETURNING *',[hash(state),hash(browser)]))[0];
-   if(!row||!url.searchParams.get('code'))return redirect('/?auth_error='+encodeURIComponent('GitHub sign-in was declined or expired. Please try again.'),cookie('__Host-pg-oauth','',0));
-   const auth=await product.oauth({code:url.searchParams.get('code')!,redirect_uri:origin+'/api/auth/callback',code_verifier:row.verifier});
+   if(!row||!['identity','installation'].includes(row.purpose)||!url.searchParams.get('code'))return redirect('/?auth_error='+encodeURIComponent('GitHub sign-in was declined or expired. Please try again.'),cookie('__Host-pg-oauth','',0));
+   const current=row.purpose==='installation'?await product.session(req):null;
+   if(row.purpose==='installation'&&(!current||String(current.id)!==String(row.account_id)))throw new ProductError(401,'Sign in again before connecting repository access.');
+   const auth=await product.oauth({code:url.searchParams.get('code')!,redirect_uri:origin+'/api/auth/callback',code_verifier:row.verifier},row.purpose==='identity');
    const user=await product.github('/user',auth.access_token);
-   await sql('INSERT INTO pg_accounts(id,login,avatar_url,credentials,token_expires_at,refresh_expires_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET login=EXCLUDED.login,avatar_url=EXCLUDED.avatar_url,credentials=EXCLUDED.credentials,token_expires_at=EXCLUDED.token_expires_at,refresh_expires_at=EXCLUDED.refresh_expires_at,updated_at=now()',[user.id,user.login,user.avatar_url,encrypt(auth,env),auth.expires_in?new Date(Date.now()+auth.expires_in*1000).toISOString():null,auth.refresh_token_expires_in?new Date(Date.now()+auth.refresh_token_expires_in*1000).toISOString():null]);
+   if(row.purpose==='installation'){
+    if(String(user.id)!==String(current.id))throw new ProductError(403,'Connect repository access using the same GitHub account you signed in with.');
+    await sql('UPDATE pg_accounts SET credentials=$2,token_expires_at=$3,refresh_expires_at=$4,refresh_lease_until=NULL,updated_at=now() WHERE id=$1',[user.id,encrypt(auth,env),auth.expires_in?new Date(Date.now()+auth.expires_in*1000).toISOString():null,auth.refresh_token_expires_in?new Date(Date.now()+auth.refresh_token_expires_in*1000).toISOString():null]);
+    await product.sync({...current,credentials:encrypt(auth,env),token_expires_at:auth.expires_in?new Date(Date.now()+auth.expires_in*1000).toISOString():null});
+    return redirect(row.return_to,cookie('__Host-pg-oauth','',0));
+   }
+   // Identity-only OAuth tokens are used once to confirm /user and are never stored.
+   // Existing repository credentials remain tied to their separate GitHub App grant.
+   await sql('INSERT INTO pg_accounts(id,login,avatar_url) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET login=EXCLUDED.login,avatar_url=EXCLUDED.avatar_url,updated_at=now()',[user.id,user.login,user.avatar_url]);
    const session=random();await sql("INSERT INTO pg_sessions(token_hash,account_id,csrf,expires_at) VALUES($1,$2,$3,now()+interval '7 days')",[hash(session),user.id,random()]);
    // Migrate only the original operator's historical owner-private jobs.
    if(user.login==='wauul'&&env.LEGACY_GITHUB_ACCOUNT_ID===String(user.id))await sql("UPDATE patchgoblin_jobs SET account_id=$1,owner_key=$2,request=request||jsonb_build_object('owner',$2::text) WHERE owner_key=$3",[user.id,'github:'+user.id,hash('private-owner|wauul/PatchGoblin').slice(0,24)]);
@@ -55,7 +65,7 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
   if(req.method!=='GET'&&req.method!=='HEAD'){if(req.headers.get('x-csrf-token')!==account.csrf)throw new ProductError(403,'Session verification failed. Refresh the page and try again.');}
   if(path==='/api/bootstrap'){
    const repositories=await product.repositories(account.id),usage=(await sql("SELECT count(*) FILTER(WHERE created_at>now()-interval '1 day')::int AS daily,count(*) FILTER(WHERE created_at>now()-interval '1 hour')::int AS hourly,COALESCE(sum((state->'metrics'->>'model_tokens')::bigint),0)::bigint AS model_tokens FROM patchgoblin_jobs WHERE account_id=$1",[account.id]))[0];
-   return json({connected:true,login:account.login,account:{id:Number(account.id),login:account.login,avatar_url:account.avatar_url,onboarding_at:account.onboarding_at},csrf:account.csrf,repositories,usage,worker_submission:true,limits});
+   return json({connected:true,repository_authorized:!!account.credentials,login:account.login,account:{id:Number(account.id),login:account.login,avatar_url:account.avatar_url,onboarding_at:account.onboarding_at},csrf:account.csrf,repositories,usage,worker_submission:true,limits});
   }
   if(path==='/api/extension/status'){
    const name=repositoryName(url.searchParams.get('repo'));
@@ -66,7 +76,14 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
    return json({installed:true,enabled:auth.row.enabled,paused:auth.row.paused,can_push:!!auth.actual.permissions?.push,workflow_count:workflows.workflows.filter((w:any)=>w.state==='active').length,run_conclusion:run?.status==='completed'?run.conclusion:null,jobs});
   }
   if(path==='/api/auth/logout'&&req.method==='POST'){await readBody();await sql('DELETE FROM pg_sessions WHERE token_hash=$1',[account.token_hash]);return json({ok:true},200,{'Set-Cookie':cookie('__Host-pg-session','',0)});}
-  if(path==='/api/github/setup'){await product.sync(account);return redirect('/onboarding');}
+  if(path==='/api/github/connect'&&req.method==='GET'){
+   if(!env.GITHUB_CLIENT_ID)throw new ProductError(503,'Repository authorization is not configured.');
+   const state=random(),browser=random(),verifier=random();
+   await sql("INSERT INTO pg_oauth_states(state_hash,browser_hash,verifier,return_to,purpose,account_id,expires_at) VALUES($1,$2,$3,'/onboarding','installation',$4,now()+interval '10 minutes')",[hash(state),hash(browser),verifier,account.id]);
+   const target=new URL('https://github.com/login/oauth/authorize');target.searchParams.set('client_id',env.GITHUB_CLIENT_ID);target.searchParams.set('redirect_uri',origin+'/api/auth/callback');target.searchParams.set('state',state);target.searchParams.set('login',account.login);target.searchParams.set('code_challenge',Buffer.from(hash(verifier),'hex').toString('base64url'));target.searchParams.set('code_challenge_method','S256');
+   return redirect(target.toString(),cookie('__Host-pg-oauth',browser,600));
+  }
+  if(path==='/api/github/setup'){if(!account.credentials)return redirect('/onboarding');await product.sync(account);return redirect('/onboarding');}
   if(path==='/api/github/sync'&&req.method==='POST'){await readBody();return json({repositories:await product.sync(account)});}
   if(path==='/api/account/onboarding'&&req.method==='POST'){await readBody();await sql('UPDATE pg_accounts SET onboarding_at=now() WHERE id=$1',[account.id]);return json({ok:true});}
   if(path==='/api/account/export'){

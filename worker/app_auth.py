@@ -58,7 +58,8 @@ class InstallationGitHub(GitHub):
     def request(self, method, path, **kwargs):
         if time.monotonic() > self.expires:
             self.refresh()
-        if not path.startswith("/repos/" + self.repo + "/"):
+        prefix = "/repos/" + self.repo
+        if path.split("?", 1)[0] != prefix and not path.startswith(prefix + "/"):
             raise ValueError("Installation request escaped its repository scope")
         return super().request(method, path, **kwargs)
 
