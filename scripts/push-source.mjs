@@ -1,7 +1,13 @@
 // All credentials arrive via stdin or ignored .env, never shell arguments or persistent helpers.
 import {spawnSync} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,unlinkSync} from 'node:fs';
-let input='';for await(const chunk of process.stdin)input+=chunk;
+import {createInterface} from 'node:readline';
+let input='';
+if(process.argv.includes('--stdin')){
+ console.log('Ready for source credential JSON on stdin (input is hidden).');
+ const rl=createInterface({input:process.stdin,terminal:false});
+ input=await new Promise(resolve=>rl.once('line',resolve));rl.close();
+}
 const config=input.trim()?JSON.parse(input):{};
 let token=config.token;
 if(!token)token=readFileSync('.env','utf8').match(/^GITHUB_TOKEN=(.+)$/m)[1];
