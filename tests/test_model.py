@@ -88,3 +88,21 @@ def test_groq_strict_files_transport_and_real_usage_fields(monkeypatch):
     assert model.metrics()['prompt_tokens']==1200
     assert model.metrics()['completion_tokens']==300
     assert model.metrics()['model_tokens']==1500
+
+
+def test_pipeline_selection_binds_the_original_proposal_without_yaml_copying(monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','synthetic-provider-key')
+    monkeypatch.setenv('MODEL_BASE_URL','https://api.groq.com/openai/v1')
+    monkeypatch.setenv('MODEL_CONTEXT_TOKENS','12000')
+    original_client=httpx.Client
+    files={'.github/workflows/patchgoblin-maintenance.yml':'# Keep comment\nname: CI\n'}
+    def route(request):
+        payload=json.loads(request.content)
+        schema=payload['response_format']['json_schema']['schema']
+        assert 'files' not in schema['properties']
+        context=json.loads(payload['messages'][1]['content'])
+        decision={'action':'patch','candidate_id':context['candidate_id'],'diagnosis':'New typecheck needs coverage','category':'pipeline-coverage','evidence':[]}
+        return httpx.Response(200,json={'usage':{'total_tokens':800,'prompt_tokens':700,'completion_tokens':100},'choices':[{'message':{'content':json.dumps(decision)}}]})
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original_client(transport=httpx.MockTransport(route),**kwargs))
+    model=Model()
+    assert model.decide({'mode':'maintenance','candidate_files':files,'coverage_gap':'New command'})['files']==files
