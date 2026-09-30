@@ -1,0 +1,43 @@
+name: PatchGoblin evaluation
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: Optional single fixture ID (blank runs all 12)
+        required: false
+        type: string
+permissions:
+  contents: read
+  models: read
+concurrency:
+  group: patchgoblin-evaluation
+  cancel-in-progress: false
+jobs:
+  evaluate:
+    if: github.actor == 'wauul'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.8.22'
+      - run: uv sync --frozen --group dev
+      - name: Real model + Docker evaluation and rule baseline
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CASE_ID: ${{ inputs.case }}
+        run: |
+          if [ -n "$CASE_ID" ]; then
+            uv run --frozen python -m worker.evaluate --case "$CASE_ID" --baseline
+          else
+            uv run --frozen python -m worker.evaluate --baseline
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-results
+          path: docs/*.json
+          retention-days: 30

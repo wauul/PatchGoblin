@@ -1,0 +1,14 @@
+[
+ {"id":"pip-conflict","mode":"repair","expected":"verified","oracle":"Original installation fails; patched resolver succeeds; original temperature/request tests pass; all declared dependencies remain."},
+ {"id":"missing-dependency","mode":"repair","expected":"verified","oracle":"Original pytest raises ModuleNotFoundError requests; patched declaration includes requests; unchanged semantic tests pass."},
+ {"id":"python-mismatch","mode":"repair","expected":"verified","oracle":"Original Python 3.11 is rejected by requires-python>=3.12; patched workflow uses supported Python>=3.12; project runtime requirement is preserved."},
+ {"id":"install-command","mode":"repair","expected":"verified","oracle":"Original pip install requirements.txt fails; corrected -r installation succeeds; unchanged tests pass."},
+ {"id":"uv-lock-drift","mode":"repair","expected":"verified","oracle":"Original frozen lock mismatch fails; deterministic uv lock refresh matches unchanged metadata; frozen installation and tests pass."},
+ {"id":"builder-pip","mode":"builder","expected":"verified","oracle":"Workflow is parseable, contents:read only, push+pull_request events, exact project install and tests run and pass."},
+ {"id":"builder-uv","mode":"builder","expected":"verified","oracle":"Frozen uv installation and project tests pass; generated CI uses uv conventions without replacing files."},
+ {"id":"builder-no-tests","mode":"builder","expected":"verified","oracle":"Install-only workflow validates; no tests added; explicit no-tests limitation is reported."},
+ {"id":"assertion-failure","mode":"repair","expected":"unsupported","oracle":"Unchanged tests have a business assertion failure; no verified dependency repair or test modification."},
+ {"id":"poetry-project","mode":"builder","expected":"unsupported","oracle":"Unsupported package manager is reported; no workflow created."},
+ {"id":"custom-command","mode":"repair","expected":"unsupported","oracle":"Arbitrary shell command rejected before repository execution."},
+ {"id":"service-workflow","mode":"repair","expected":"unsupported","oracle":"Service-based CI is rejected accurately, without claiming reproduction."}
+]

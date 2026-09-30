@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {handleApi,redact,type Env} from '../server/api';
+const env:Env={GITHUB_TOKEN:'synthetic-token',CONTROL_REPO:'wauul/PatchGoblin',ALLOWED_REPOS:'wauul/patchgoblin-lab',OWNER_LOGIN:'wauul'};
+const request=(path:string,body?:any,user='alice')=>new Request('https://patchgoblin.example/api'+path,{method:body===undefined?'GET':'POST',headers:{...(user?{'oai-authenticated-user-id':user}:{}),'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+const json=(body:any)=>new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
+test('anonymous access denied without touching GitHub',async()=>{const result=await handleApi(request('/jobs',undefined,''),env,async()=>{throw Error('must not call')});assert.equal(result.status,401)});
+test('repository allowlist enforced',async()=>{const result=await handleApi(request('/jobs',{repo:'attacker/private',mode:'builder',key:'1234567890123456'}),env,async()=>{throw Error('must not call')});assert.equal(result.status,400)});
+test('invalid failed run rejected',async()=>{const result=await handleApi(request('/jobs',{repo:'wauul/patchgoblin-lab',mode:'repair',run_id:'7',key:'1234567890123456'}),env);assert.equal(result.status,400)});
+test('another owner cannot read a job',async()=>{const fetcher=async()=>json({number:7,title:'PatchGoblin job builder abc',body:JSON.stringify({owner:'someone-else',repo:'wauul/patchgoblin-lab'}),user:{login:'wauul'}});const r=await handleApi(request('/jobs/7'),env,fetcher as typeof fetch);assert.equal(r.status,404)});
+test('cross-origin mutations rejected',async()=>{const req=request('/jobs',{repo:'wauul/patchgoblin-lab',mode:'builder',key:'1234567890123456'});req.headers.set('Origin','https://evil.example');const r=await handleApi(req,env);assert.equal(r.status,403)});
+test('backend never returns provider credentials on error',async()=>{const r=await handleApi(request('/bootstrap'),env,(async()=>new Response('',{status:401})) as typeof fetch);assert.equal(r.status,503);assert.ok(!(await r.text()).includes('synthetic-token'))});
+test('missing integration produces honest connection state',async()=>{const r=await handleApi(request('/bootstrap'),{});const state=await r.json();assert.equal(state.connected,false)});
+test('unverified work cannot submit',async()=>{const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('alice|wauul/PatchGoblin'));const owner=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);const fetcher=async(url:any)=>String(url).includes('/comments')?json([]):json({number:7,state:'open',title:'PatchGoblin job builder abc',body:JSON.stringify({owner,repo:'wauul/patchgoblin-lab'}),user:{login:'wauul'}});const r=await handleApi(request('/jobs/7/submit',{}),env,fetcher as typeof fetch);assert.equal(r.status,409)});
+test('secret redaction covers token-like values',()=>{assert.equal(redact('ghp_'+'a'.repeat(30)),'[REDACTED]')});

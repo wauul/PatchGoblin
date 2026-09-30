@@ -1,0 +1,44 @@
+name: PatchGoblin worker
+on:
+  issues:
+    types: [opened, reopened]
+permissions:
+  contents: read
+  issues: write
+  actions: read
+  models: read
+concurrency:
+  group: patchgoblin-worker
+  cancel-in-progress: false
+jobs:
+  investigate:
+    if: github.event.issue.user.login == 'wauul' && startsWith(github.event.issue.title, 'PatchGoblin job ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OWNER_LOGIN: wauul
+      ALLOWED_REPOS: wauul/patchgoblin-lab
+      MODEL_NAME: openai/gpt-4.1-mini
+      MODEL_BASE_URL: https://models.github.ai/inference
+      MAX_STEPS: '6'
+      MAX_ATTEMPTS: '2'
+      MAX_MODEL_TOKENS: '12000'
+      JOB_TIMEOUT_SECONDS: '600'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.8.22'
+      - run: uv sync --frozen
+      - name: Bounded agent (credentials remain on the host)
+        run: uv run --frozen python -m worker.main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-result-${{ github.event.issue.number }}
+          path: result.json
+          retention-days: 14
