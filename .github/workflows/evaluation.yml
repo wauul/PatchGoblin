@@ -8,7 +8,6 @@ on:
         type: string
 permissions:
   contents: read
-  models: read
 concurrency:
   group: patchgoblin-evaluation
   cancel-in-progress: false
@@ -16,7 +15,7 @@ jobs:
   evaluate:
     if: github.actor == 'wauul'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,6 +24,12 @@ jobs:
         with:
           version: '0.8.22'
       - run: uv sync --frozen --group dev
+      - uses: actions/cache@v4
+        with:
+          path: .local/model-runtime/qwen-coder-3b.gguf
+          key: qwen-coder-3b-724fb256
+      - name: Start pinned real inference server
+        run: uv run --frozen python scripts/setup_runner_model.py
       - name: Real model + Docker evaluation and rule baseline
         env:
           GITHUB_TOKEN: ${{ github.token }}

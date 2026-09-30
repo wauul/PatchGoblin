@@ -20,9 +20,9 @@ Explain uncertainty. Do not claim verification: deterministic tools will do that
 
 class Model:
     def __init__(self):
-        self.base = os.getenv("MODEL_BASE_URL", "https://models.github.ai/inference").rstrip("/")
-        self.name = os.getenv("MODEL_NAME", "openai/gpt-4.1-mini")
-        self.key = os.getenv("MODEL_API_KEY") or os.getenv("GITHUB_TOKEN")
+        self.base = os.getenv("MODEL_BASE_URL", "http://127.0.0.1:8081/v1").rstrip("/")
+        self.name = os.getenv("MODEL_NAME", "qwen-coder-3b")
+        self.key = os.getenv("MODEL_API_KEY")
         if not self.key:
             raise RuntimeError("No server-side model credential configured")
         self.tokens = 0
@@ -38,11 +38,13 @@ class Model:
                    {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)[:32000]}],
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
         self.calls += 1
-        with httpx.Client(timeout=70) as client:
+        with httpx.Client(timeout=240) as client:
             response = client.post(self.base + "/chat/completions", headers={"Authorization": "Bearer " + self.key}, json=payload)
         if response.status_code != 200:
             # Provider response may include secret-bearing snippets; expose only status.
             raise RuntimeError(f"Model provider returned HTTP {response.status_code}; no fix was attempted")
+        if "json" not in response.headers.get("content-type", ""):
+            raise RuntimeError("Model provider did not return JSON. Verify the configured inference endpoint; no repair was invented.")
         result = response.json()
         usage = result.get("usage")
         if usage:
@@ -56,4 +58,4 @@ class Model:
     def metrics(self) -> dict:
         return {"model": self.name, "model_calls": self.calls,
                 "model_tokens": self.tokens if self.usage_available else None,
-                "estimated_cost_usd": None, "cost_note": "No billing meter available. GitHub Models free-tier limits apply; paid inference is not enabled by this application."}
+                "estimated_cost_usd": None, "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing."}

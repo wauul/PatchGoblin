@@ -6,7 +6,6 @@ permissions:
   contents: read
   issues: write
   actions: read
-  models: read
 concurrency:
   group: patchgoblin-worker
   cancel-in-progress: false
@@ -18,8 +17,6 @@ jobs:
     env:
       OWNER_LOGIN: wauul
       ALLOWED_REPOS: wauul/patchgoblin-lab
-      MODEL_NAME: openai/gpt-4.1-mini
-      MODEL_BASE_URL: https://models.github.ai/inference
       MAX_STEPS: '6'
       MAX_ATTEMPTS: '2'
       MAX_MODEL_TOKENS: '12000'
@@ -32,6 +29,12 @@ jobs:
         with:
           version: '0.8.22'
       - run: uv sync --frozen
+      - uses: actions/cache@v4
+        with:
+          path: .local/model-runtime/qwen-coder-3b.gguf
+          key: qwen-coder-3b-724fb256
+      - name: Start real inference on the disposable runner
+        run: uv run --frozen python scripts/setup_runner_model.py
       - name: Bounded agent (credentials remain on the host)
         run: uv run --frozen python -m worker.main
         env:
