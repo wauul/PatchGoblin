@@ -1,0 +1,10 @@
+{
+ "manifest_version":3,
+ "name":"PatchGoblin — verified CI help",
+ "version":"2.0.0",
+ "description":"Open verified CI repair, creation and maintenance from GitHub. No GitHub tokens are stored in this extension.",
+ "permissions":["activeTab"],
+ "host_permissions":["https://patchgoblin.vercel.app/*"],
+ "action":{"default_popup":"popup.html","default_title":"Open PatchGoblin"},
+ "content_security_policy":{"extension_pages":"script-src 'self'; object-src 'none'"}
+}

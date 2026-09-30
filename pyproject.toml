@@ -8,6 +8,8 @@ dependencies = [
     "PyYAML>=6.0,<7",
     "packaging>=24,<26",
     "psycopg[binary]>=3.2,<4",
+    "pyjwt[crypto]>=2.10,<3",
+    "ruamel-yaml>=0.18,<0.19",
 ]
 
 [dependency-groups]

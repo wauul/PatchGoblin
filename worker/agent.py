@@ -47,10 +47,10 @@ class Agent:
             self.event("inspect", "Reading immutable repository metadata and CI evidence")
             repo, mode = request["repo"], request["mode"]
             allowed = os.getenv("ALLOWED_REPOS", "wauul/patchgoblin-lab").split(",")
-            if repo not in allowed or mode not in {"repair", "builder"}:
+            if (repo not in allowed and not getattr(self.github,'installation_id',None)) or mode not in {"repair", "builder"}:
                 raise ValueError("Repository or mode is not authorized")
             metadata = self.github.request("GET", f"/repos/{repo}")
-            if metadata.get("private"):
+            if metadata.get("private") and not getattr(self.github,'installation_id',None):
                 raise Unsupported("This free deployment supports allowlisted public repositories; private archives require a GitHub App installation")
             ci = (self.github.ci_evidence(repo, int(request["run_id"]), stored_logs=request["ci_logs"])
                   if "ci_logs" in request else self.github.ci_evidence(repo, int(request["run_id"]))) if mode == "repair" else None
@@ -62,7 +62,11 @@ class Agent:
                 root = Path(directory)
                 self.github.download(repo, sha, root)
                 protected = {p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob("*") if p.is_file()}
-                project = inspect(root)
+                project_inspect=inspect
+                project_plan=workflow_plan
+                if (root/'package.json').exists():
+                    from worker.node_project import inspect as project_inspect,workflow_plan as project_plan
+                project = project_inspect(root)
                 self.state["project"] = {k:v for k,v in project.items() if k not in {"files","workflows"}}
                 if not project["has_tests"]:
                     self.state["limitations"].append("Repository has no detected tests; dependency installation is not test coverage.")
@@ -74,7 +78,7 @@ class Agent:
                     path = safe_path(ci["workflow_path"].split("@", 1)[0])
                     if path not in project["workflows"]:
                         raise Unsupported("Failed workflow is not present at the failed commit")
-                    python, commands, _ = workflow_plan(project["workflows"][path])
+                    python, commands, _ = project_plan(project["workflows"][path])
                     self.event("reproduce", "Running the original workflow commands in a disposable sandbox")
                     original = self.run_commands(sandbox, python, commands)
                     evidence["reproduction"] = original
@@ -98,8 +102,8 @@ class Agent:
                     self.state["evidence"] = [redact(str(x))[:1000] for x in decision.get("evidence", [])[:8]]
                     action = decision.get("action")
                     if action == "refresh_lock":
-                        if mode != "repair" or project["manager"] != "uv":
-                            raise ValueError("Lock refresh tool requires a uv repair job")
+                        if mode != "repair" or project["manager"] not in {'uv','npm','pnpm'}:
+                            raise ValueError("Lock refresh tool requires a supported package manager")
                         action = "patch"
                         decision["files"], decision["refresh_lock"] = {}, True
                     if action == "unsupported":
@@ -117,9 +121,9 @@ class Agent:
                         raise RuntimeError("Patch attempt budget exhausted")
                     files = decision.get("files", {})
                     try:
-                        if "uv.lock" in files:
+                        if any(p in files for p in ['uv.lock','package-lock.json','pnpm-lock.yaml','yarn.lock']):
                             raise ValueError("Lockfiles must be refreshed by uv, never authored by the model")
-                        refresh_only = not files and decision.get("refresh_lock") and mode == "repair" and project["manager"] == "uv"
+                        refresh_only = not files and decision.get("refresh_lock") and mode == "repair" and project["manager"] in {'uv','npm','pnpm'}
                         if not refresh_only:
                             validate_patch(files, mode, originals)
                     except ValueError as exc:
@@ -140,18 +144,18 @@ class Agent:
                         target = root / p
                         target.parent.mkdir(parents=True, exist_ok=True)
                         target.write_text(content)
-                    updated = inspect(root)
+                    updated = project_inspect(root)
                     if decision.get("refresh_lock"):
-                        if project["manager"] != "uv":
-                            raise ValueError("Lock refresh requires uv")
-                        lock = sandbox.run("uv lock", updated["python"], install=True)
+                        lock_command={'uv':'uv lock','npm':'npm install --package-lock-only --ignore-scripts','pnpm':'pnpm install --lockfile-only --ignore-scripts'}[project['manager']]
+                        lock_path={'uv':'uv.lock','npm':'package-lock.json','pnpm':'pnpm-lock.yaml'}[project['manager']]
+                        lock = sandbox.run(lock_command, updated["python"], install=True)
                         if lock["exit_code"]:
                             evidence["lock_refresh_failure"] = lock
                             continue
-                        files["uv.lock"] = (root / "uv.lock").read_text()
+                        files[lock_path] = (root / lock_path).read_text()
                         validate_patch(files, mode, originals)
                     workflow_path = ".github/workflows/patchgoblin.yml" if mode == "builder" else path
-                    python, commands, _ = workflow_plan((root / workflow_path).read_text())
+                    python, commands, _ = project_plan((root / workflow_path).read_text())
                     if mode == "builder":
                         expected = [project["install"], *(["python -m pip install -r requirements-dev.txt"] if project["manager"] == "pip" and "requirements-dev.txt" in project["files"] else []), *project["checks"]]
                         if commands != expected:

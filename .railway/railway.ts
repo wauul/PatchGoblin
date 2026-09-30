@@ -13,6 +13,7 @@ export default defineRailway(() => {
       "JOB_TIMEOUT_SECONDS", "MAX_ATTEMPTS", "MAX_MODEL_TOKENS", "MAX_STEPS",
       "MODEL_BASE_URL", "MODEL_CONTEXT_TOKENS", "MODEL_NAME", "OWNER_LOGIN", "PORT",
       "RAILWAY_TOKEN", "WORKER_WAKE_TOKEN",
+      "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_B64", "GITHUB_APP_SLUG",
     ].map(key => [key, preserve()])),
     deploy: {
       healthcheckPath: "/health", healthcheckTimeout: 120,

@@ -82,6 +82,8 @@ def workflow_plan(text: str) -> tuple[str, list[str], str]:
 
 def validate_command(cmd: str) -> None:
     from worker.security import is_install_command
+    if re.fullmatch(r'(?:npm|pnpm|yarn) run (?:test|test:unit|test:ci|lint|typecheck|type-check|check|build)',cmd.strip()):
+        return
     if not is_install_command(cmd) and not re.fullmatch(r"(?:python -m |uv run(?: --(?:frozen|locked))? (?:python -m )?)(?:pytest|ruff check \.)(?: -[a-zA-Z]+)*", cmd.strip()):
         raise Unsupported(f"Unsupported command requires manual review: {cmd[:160]}")
     if any(x in cmd for x in [";", "$", "`", "&&", "||", "\n"]):

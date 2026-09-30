@@ -38,8 +38,8 @@ class DatabaseStore:
         if force or time.monotonic()-self.last_check>2:
             self.last_check=time.monotonic()
             with connect() as db:
-                row=db.execute("SELECT cancelled_at,lease_token,lease_expires_at>now() AS valid FROM patchgoblin_jobs WHERE id=%s",(self.id,)).fetchone()
-            self.is_cancelled=not row or bool(row["cancelled_at"]) or row["lease_token"]!=self.lease or not row["valid"]
+                row=db.execute("SELECT j.cancelled_at,j.lease_token,j.lease_expires_at>now() AS valid,CASE WHEN j.repository_id IS NULL THEN true ELSE COALESCE(r.active AND r.enabled AND NOT r.paused AND i.active,false) END AS repo_available FROM patchgoblin_jobs j LEFT JOIN pg_repositories r ON r.id=j.repository_id LEFT JOIN pg_installations i ON i.id=r.installation_id WHERE j.id=%s",(self.id,)).fetchone()
+            self.is_cancelled=not row or bool(row["cancelled_at"]) or row["lease_token"]!=self.lease or not row["valid"] or not row['repo_available']
         return self.is_cancelled
 
     def sandbox(self,sandbox_id):
