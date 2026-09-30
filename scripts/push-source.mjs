@@ -1,12 +1,13 @@
 // All credentials arrive via stdin or ignored .env, never shell arguments or persistent helpers.
 import {spawnSync} from 'node:child_process';
 import {readFileSync,writeFileSync,mkdirSync,unlinkSync} from 'node:fs';
-import {createInterface} from 'node:readline';
 let input='';
 if(process.argv.includes('--stdin')){
+ if(process.stdin.isTTY)process.stdin.setRawMode(true);
+ process.stdin.resume();
  console.log('Ready for source credential JSON on stdin (input is hidden).');
- const rl=createInterface({input:process.stdin,terminal:false});
- input=await new Promise(resolve=>rl.once('line',resolve));rl.close();
+ input=await new Promise(resolve=>{let value='';const collect=chunk=>{value+=chunk.toString();if(value.includes('\n')){process.stdin.off('data',collect);resolve(value.trim());}};process.stdin.on('data',collect);});
+ process.stdin.pause();
 }
 const config=input.trim()?JSON.parse(input):{};
 let token=config.token;
