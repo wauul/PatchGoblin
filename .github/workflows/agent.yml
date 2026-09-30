@@ -49,6 +49,9 @@ jobs:
         run: uv run --frozen python -m worker.main --startup-failure
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Report inference speed without runtime credentials
+        if: always()
+        run: uv run --frozen python scripts/inference_timings.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

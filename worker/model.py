@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import httpx
 from urllib.parse import urlparse
 from worker.security import redact
@@ -64,7 +65,8 @@ class Model:
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
         if urlparse(self.base).hostname in {"127.0.0.1", "localhost"}:
             payload["response_format"]["schema"] = schema
-        with httpx.Client(timeout=240) as client:
+        timeout = min(480, max(1, getattr(self, "deadline", time.monotonic()+480)-time.monotonic()))
+        with httpx.Client(timeout=timeout) as client:
             headers = {"Authorization": "Bearer " + self.key}
             # Exact chat-template token counting for the pinned local llama.cpp server.
             # Other compatible endpoints use a conservative UTF-8 byte upper bound.
@@ -80,7 +82,7 @@ class Model:
             available = min(budget, int(os.getenv("MODEL_CONTEXT_TOKENS", "8192"))) - input_tokens
             if available < 256:
                 raise RuntimeError("Model token budget cannot cover this prompt and a useful response")
-            payload["max_tokens"] = min(1400, available)
+            payload["max_tokens"] = min(900, available)
             self.calls += 1
             try:
                 response = client.post(self.base + "/chat/completions", headers=headers, json=payload)

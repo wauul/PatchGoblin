@@ -18,7 +18,7 @@ def test_prompt_tokens_reduce_generation_budget(monkeypatch):
         if request.url.path == "/tokenize":
             return httpx.Response(200, json={"tokens":[1]*2000})
         payload = json.loads(request.content)
-        assert payload["max_tokens"] == 968
+        assert payload["max_tokens"] == 900
         return httpx.Response(200, json={"usage":{"total_tokens":2300},"choices":[{"message":{"content":'{"action":"unsupported"}'}}]})
 
     monkeypatch.setattr(httpx, "Client", lambda **kwargs: original_client(transport=httpx.MockTransport(route), **kwargs))

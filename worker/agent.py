@@ -87,6 +87,7 @@ class Agent:
                 else:
                     self.event("reproduce", "Confirming CI is absent and inspecting the existing project checks")
                 self.model = self.model or Model()
+                self.model.deadline = self.deadline
                 attempts = 0
                 originals = {k:(root / k).read_text() for k in project["files"]}
                 for _ in range(min(int(os.getenv("MAX_STEPS", "6")), 6)):
