@@ -21,14 +21,14 @@ def inspect(root: Path) -> dict:
     if not versions:
         raise Unsupported("Python requirement does not include a supported runtime (3.11–3.13)")
     uv = (root / "uv.lock").exists() or "uv" in metadata.get("tool", {})
-    install = "uv sync --frozen" if uv else "python -m pip install -r requirements.txt" if (root / "requirements.txt").exists() else "python -m pip install -e ."
+    install = "uv sync --locked" if uv else "python -m pip install -r requirements.txt" if (root / "requirements.txt").exists() else "python -m pip install -e ."
     has_tests = any(root.glob("tests/test*.py")) or any(root.glob("test*.py"))
     checks = []
     readme = (root / "README.md").read_text()[:12000] if (root / "README.md").exists() else ""
     if has_tests:
-        checks.append("uv run --frozen pytest" if uv else "python -m pytest")
+        checks.append("uv run --locked python -m pytest" if uv else "python -m pytest")
     if "ruff" in metadata.get("tool", {}):
-        checks.append("uv run --frozen ruff check ." if uv else "python -m ruff check .")
+        checks.append("uv run --locked python -m ruff check ." if uv else "python -m ruff check .")
     # Execute only understood commands. Report custom commands instead of silently dropping them.
     workflows = {}
     for path in sorted((root / ".github/workflows").glob("*")):
@@ -75,7 +75,7 @@ def workflow_plan(text: str) -> tuple[str, list[str], str]:
 
 def validate_command(cmd: str) -> None:
     from worker.security import is_install_command
-    if not is_install_command(cmd) and not re.fullmatch(r"(?:python -m |uv run(?: --frozen)? )(?:pytest|ruff check \.)(?: -[a-zA-Z]+)*", cmd.strip()):
+    if not is_install_command(cmd) and not re.fullmatch(r"(?:python -m |uv run(?: --(?:frozen|locked))? (?:python -m )?)(?:pytest|ruff check \.)(?: -[a-zA-Z]+)*", cmd.strip()):
         raise Unsupported(f"Unsupported command requires manual review: {cmd[:160]}")
     if any(x in cmd for x in [";", "$", "`", "&&", "||", "\n"]):
         raise Unsupported("Shell expansion is forbidden")

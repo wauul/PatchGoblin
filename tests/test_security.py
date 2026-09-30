@@ -70,7 +70,7 @@ def test_uv_detected_and_frozen(tmp_path):
     (tmp_path / "uv.lock").write_text("version = 1\n")
     project = inspect(tmp_path)
     assert project["manager"] == "uv"
-    assert project["install"] == "uv sync --frozen"
+    assert project["install"] == "uv sync --locked"
 
 
 def test_private_requirement_bounds(tmp_path):
