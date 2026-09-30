@@ -77,6 +77,10 @@ class PipelineAgent(Agent):
                     "candidate_workflow": next(iter(plan["files"].values())),
                     "candidate_files": plan["files"],
                     "coverage_gap": plan["reason"],
+                    "coverage_before": {
+                        "covered": plan["coverage"]["covered"],
+                        "pipelines": plan["coverage"]["pipelines"],
+                    },
                 }
                 self.event(
                     "reproduce",

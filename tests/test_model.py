@@ -106,3 +106,19 @@ def test_pipeline_selection_binds_the_original_proposal_without_yaml_copying(mon
     monkeypatch.setattr(httpx,'Client',lambda **kwargs:original_client(transport=httpx.MockTransport(route),**kwargs))
     model=Model()
     assert model.decide({'mode':'maintenance','candidate_files':files,'coverage_gap':'New command'})['files']==files
+
+
+def test_node_repair_logs_fit_real_token_budget_without_byte_overcount(monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY','synthetic-provider-key')
+    monkeypatch.setenv('MODEL_BASE_URL','https://api.groq.com/openai/v1')
+    monkeypatch.setenv('MODEL_CONTEXT_TOKENS','12000')
+    original_client=httpx.Client
+    def route(request):
+        payload=json.loads(request.content)
+        assert payload['max_tokens']>=500
+        assert 'Missing typescript from lockfile' in payload['messages'][1]['content']
+        return httpx.Response(200,json={'usage':{'total_tokens':3500,'prompt_tokens':3400,'completion_tokens':100},'choices':[{'message':{'content':json.dumps({'action':'refresh_lock','files':[]})}}]})
+    monkeypatch.setattr(httpx,'Client',lambda **kwargs:original_client(transport=httpx.MockTransport(route),**kwargs))
+    model=Model()
+    result=model.decide({'mode':'repair','project':{'manager':'npm','language':'node','files':{'package.json':'{}'}},'reproduction':[{'logs':'Missing typescript from lockfile. '*300}]})
+    assert result['action']=='refresh_lock'

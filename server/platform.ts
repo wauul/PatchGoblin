@@ -70,10 +70,11 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
   if(path==='/api/extension/status'){
    const name=repositoryName(url.searchParams.get('repo'));
    let auth;try{auth=await product.authorize(account,name);}catch(error){if(error instanceof ProductError&&[403,404].includes(error.status))return json({installed:false});throw error;}
-   const workflows=await product.github(`/repos/${name}/actions/workflows?per_page=100`,auth.token);
+   let workflowCount=0;
+   try{const files=await product.github(`/repos/${name}/contents/.github/workflows?ref=${encodeURIComponent(auth.row.default_branch)}`,auth.token);workflowCount=Array.isArray(files)?files.filter((f:any)=>f.type==='file'&&/\.ya?ml$/.test(f.name)).length:0;}catch(error){if(!(error instanceof ProductError)||error.status!==404)throw error;}
    let run=null;if(url.searchParams.get('run')){const id=Number(url.searchParams.get('run'));if(!Number.isSafeInteger(id)||id<1)throw new ProductError(400,'Invalid run identifier.');run=await product.github(`/repos/${name}/actions/runs/${id}`,auth.token);}
    const jobs=await sql("SELECT id,status,request->>'mode' AS mode FROM patchgoblin_jobs WHERE account_id=$1 AND repository_id=$2 ORDER BY created_at DESC LIMIT 3",[account.id,auth.row.id]);
-   return json({installed:true,enabled:auth.row.enabled,paused:auth.row.paused,can_push:!!auth.actual.permissions?.push,workflow_count:workflows.workflows.filter((w:any)=>w.state==='active').length,run_conclusion:run?.status==='completed'?run.conclusion:null,jobs});
+   return json({installed:true,enabled:auth.row.enabled,paused:auth.row.paused,can_push:!!auth.actual.permissions?.push,workflow_count:workflowCount,run_conclusion:run?.status==='completed'?run.conclusion:null,jobs});
   }
   if(path==='/api/auth/logout'&&req.method==='POST'){await readBody();await sql('DELETE FROM pg_sessions WHERE token_hash=$1',[account.token_hash]);return json({ok:true},200,{'Set-Cookie':cookie('__Host-pg-session','',0)});}
   if(path==='/api/github/connect'&&req.method==='GET'){

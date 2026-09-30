@@ -10,6 +10,8 @@ COPY --from=javascript /deps/node_modules ./node_modules
 RUN pip install --no-cache-dir uv==0.8.22
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
+ENV TIKTOKEN_CACHE_DIR=/app/.tokenizer
+RUN /app/.venv/bin/python -c "import tiktoken; tiktoken.get_encoding('o200k_harmony')"
 COPY worker ./worker
 COPY scripts/railway-sandbox-bridge.mjs ./scripts/railway-sandbox-bridge.mjs
 ENV PORT=8080 PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

@@ -10,6 +10,7 @@ dependencies = [
     "psycopg[binary]>=3.2,<4",
     "pyjwt[crypto]>=2.10,<3",
     "ruamel-yaml>=0.18,<0.19",
+    "tiktoken>=0.12,<1",
 ]
 
 [dependency-groups]
