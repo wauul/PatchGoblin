@@ -1,6 +1,7 @@
 import json
 import os
 import httpx
+from urllib.parse import urlparse
 from worker.security import redact
 
 SYSTEM = """You are PatchGoblin, a bounded Python dependency-installation CI agent.
@@ -38,6 +39,8 @@ class Model:
         instruction = SYSTEM
         if evidence.get("mode") == "builder":
             instruction += "\nCURRENT TASK IS BUILDER. There is no failure to repair. Do not update dependencies. Return exactly one file: .github/workflows/patchgoblin.yml. The candidate_workflow is a trusted tool proposal that preserves all detected checks. Use its full content verbatim unless evidence requires a supported adjustment. Explain the CI you are adding.\n"
+        else:
+            instruction += "\nCURRENT TASK IS REPAIR. Look at reproduction and verification_failure. Return a real change, never copy an unchanged file. When pip reports conflicting dependency constraints, change the conflicting declaration in requirements.txt or pyproject.toml to a range compatible with the resolver evidence; preserve the package name. Changing a valid install command or copying its workflow cannot fix conflicting declarations. For a bad install command or incompatible Python runtime, change only that workflow field. For stale uv lock metadata, request refresh_lock:true.\n"
         # Put failures/corrections first and omit bulky lock package listings. The model
         # can request narrow reads; initial logs must never be truncated by metadata.
         context = {k:v for k,v in evidence.items() if k != "project"}
@@ -49,9 +52,25 @@ class Model:
         payload = {"model": self.name, "messages": [{"role": "system", "content": instruction},
                    {"role": "user", "content": json.dumps(context, ensure_ascii=False)[:32000]}],
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
-        self.calls += 1
         with httpx.Client(timeout=240) as client:
-            response = client.post(self.base + "/chat/completions", headers={"Authorization": "Bearer " + self.key}, json=payload)
+            headers = {"Authorization": "Bearer " + self.key}
+            # Exact chat-template token counting for the pinned local llama.cpp server.
+            # Other compatible endpoints use a conservative UTF-8 byte upper bound.
+            if urlparse(self.base).hostname in {"127.0.0.1", "localhost"}:
+                endpoint = self.base.removesuffix("/v1")
+                template = client.post(endpoint + "/apply-template", headers=headers, json={"messages":payload["messages"]})
+                template.raise_for_status()
+                counted = client.post(endpoint + "/tokenize", headers=headers, json={"content":template.json()["prompt"],"add_special":True})
+                counted.raise_for_status()
+                input_tokens = len(counted.json()["tokens"]) + 32
+            else:
+                input_tokens = sum(len(m["content"].encode()) for m in payload["messages"]) + 256
+            available = budget - input_tokens
+            if available < 256:
+                raise RuntimeError("Model token budget cannot cover this prompt and a useful response")
+            payload["max_tokens"] = min(2200, available)
+            self.calls += 1
+            response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
         if response.status_code != 200:
             # Provider response may include secret-bearing snippets; expose only status.
             raise RuntimeError(f"Model provider returned HTTP {response.status_code}; no fix was attempted")
