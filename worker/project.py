@@ -48,20 +48,27 @@ def workflow_plan(text: str) -> tuple[str, list[str], str]:
     data = yaml.safe_load(text)
     if not isinstance(data, dict):
         raise Unsupported("Invalid workflow")
+    if data.get("env") or data.get("defaults"):
+        raise Unsupported("Workflow environment/default overrides require manual review")
     jobs = data.get("jobs", {})
     if len(jobs) != 1:
         raise Unsupported("Initial runner supports one Python CI job; multiple jobs require manual review")
     job = next(iter(jobs.values()))
     if job.get("services") or job.get("container") or job.get("strategy"):
         raise Unsupported("Service/container/matrix workflows require manual review")
+    if job.get("env") or job.get("defaults") or job.get("if") or job.get("continue-on-error"):
+        raise Unsupported("Job environment or conditional policy requires manual review")
     python, commands = "3.11", []
     for step in job.get("steps", []):
         if step.get("if") or step.get("continue-on-error") or step.get("working-directory") or step.get("env"):
             raise Unsupported("Conditional or environment-dependent steps require manual review")
-        if "setup-python@" in step.get("uses", ""):
-            python = str(step.get("with", {}).get("python-version", "3.11"))
-        elif step.get("uses") and not any(x in step["uses"] for x in ["actions/checkout@", "astral-sh/setup-uv@"]):
+        uses = step.get("uses", "")
+        if uses and not uses.startswith(("actions/checkout@", "actions/setup-python@", "astral-sh/setup-uv@")):
             raise Unsupported("Unsupported third-party workflow step")
+        if uses.startswith("actions/checkout@") and set(step.get("with", {})) - {"fetch-depth", "persist-credentials"}:
+            raise Unsupported("Custom checkout changes the repository execution context")
+        if uses.startswith("actions/setup-python@"):
+            python = str(step.get("with", {}).get("python-version", "3.11"))
         if "run" in step:
             for cmd in step["run"].strip().splitlines():
                 validate_command(cmd)
@@ -84,7 +91,7 @@ def validate_command(cmd: str) -> None:
 def make_workflow(project: dict) -> str:
     steps = [{"uses": "actions/checkout@v4"}, {"uses": "actions/setup-python@v5", "with": {"python-version": project["python"]}}]
     if project["manager"] == "uv":
-        steps.append({"uses": "astral-sh/setup-uv@v6", "with": {"enable-cache": True}})
+        steps.append({"uses": "astral-sh/setup-uv@v6", "with": {"enable-cache": True, "version":"0.8.22"}})
     elif "requirements.txt" in project["files"]:
         steps[1]["with"].update({"cache": "pip", "cache-dependency-path": "requirements*.txt"})
     steps.append({"name": "Install dependencies", "run": project["install"]})

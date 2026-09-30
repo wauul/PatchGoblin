@@ -72,6 +72,17 @@ def validate_patch(files: dict[str, str], mode: str, originals: dict[str, str]) 
                         elif "run" in previous and is_install_command(previous["run"]):
                             if {k:v for k,v in previous.items() if k != "run"} != {k:v for k,v in current.items() if k != "run"} or not is_install_command(current.get("run", "")):
                                 raise ValueError("Installation step may only become another permitted install command")
+                            command = current["run"].replace("python -m pip", "pip").replace("uv pip", "pip").strip()
+                            if previous["run"].strip().startswith("uv sync"):
+                                expected = previous["run"].replace("--frozen", "--locked").strip()
+                            elif "requirements-dev.txt" in previous["run"] and "requirements-dev.txt" in originals:
+                                expected = "pip install -r requirements-dev.txt"
+                            elif "requirements.txt" in originals:
+                                expected = "pip install -r requirements.txt"
+                            else:
+                                expected = "pip install -e ."
+                            if command != expected:
+                                raise ValueError("Installation repair must install the existing project declarations and preserve lock validation")
                         else:
                             raise ValueError("Required validation cannot be modified")
             for name in old_jobs:
@@ -111,4 +122,6 @@ def dependency_names(path: str, text: str) -> set[str]:
 
 
 def is_install_command(command: str) -> bool:
+    if any(flag in command for flag in ["--no-deps", "--ignore-requires-python", "legacy-resolver"]):
+        return False
     return bool(re.fullmatch(r"(?:python -m pip|pip|uv pip) install (?:[A-Za-z0-9_.\[\],=<>!~ -]+)|uv sync(?: --(?:frozen|locked|all-extras|all-groups|dev))*", command.strip()))

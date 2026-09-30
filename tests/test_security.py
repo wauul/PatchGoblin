@@ -77,3 +77,32 @@ def test_private_requirement_bounds(tmp_path):
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\nversion="1"\nrequires-python="<3.10"\n')
     with pytest.raises(Unsupported, match="supported runtime"):
         inspect(tmp_path)
+
+
+@pytest.mark.parametrize("command", ["pip install --no-deps requests", "pip install --ignore-requires-python requests", "pip install --use-deprecated=legacy-resolver requests"])
+def test_dependency_validation_cannot_be_suppressed(command):
+    from worker.security import is_install_command
+    assert not is_install_command(command)
+
+
+def test_install_repair_cannot_ignore_project_declarations(tmp_path):
+    (tmp_path / "requirements.txt").write_text("pytest\nrequests\nurllib3==1.20\n")
+    original = make_workflow(inspect(tmp_path))
+    changed = original.replace("python -m pip install -r requirements.txt", "python -m pip install pytest requests")
+    with pytest.raises(ValueError, match="existing project declarations"):
+        validate_patch({".github/workflows/ci.yml":changed}, "repair", {".github/workflows/ci.yml":original,"requirements.txt":(tmp_path / "requirements.txt").read_text()})
+
+
+@pytest.mark.parametrize("step", [
+    {"uses":"evil/actions/checkout@v4"},
+    {"uses":"actions/checkout@v4", "with":{"repository":"evil/other"}},
+])
+def test_unreproducible_checkout_is_unsupported(step):
+    import yaml
+    with pytest.raises(Unsupported):
+        workflow_plan(yaml.safe_dump({"jobs":{"ci":{"steps":[step,{"run":"python -m pytest"}]}}}))
+
+
+def test_job_environment_cannot_silently_change_validation():
+    with pytest.raises(Unsupported, match="environment"):
+        workflow_plan('jobs:\n  ci:\n    env:\n      PYTEST_ADDOPTS: "-k nothing"\n    steps:\n      - run: python -m pytest\n')
