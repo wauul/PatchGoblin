@@ -274,5 +274,22 @@
     }
   ],
   "cost_scope": "Model token estimates use list rates, not actual charges or total infrastructure cost. Railway uses existing included usage/credits.",
-  "evaluation_scope": "Two live hosted success flows plus real cancellation. Historical 12-case Qwen results are not Groq results."
+  "evaluation_scope": "Two live hosted success flows plus real cancellation. Historical 12-case Qwen results are not Groq results.",
+  "application_commit": "480f129e0a6d1504156429f59dc0d9a09e77586b",
+  "vercel_deployment_id": "dpl_6gMXVxVfpX5TpbhDn6sQuG41E4me",
+  "railway_deployment_id": "a735c5d1-2c97-4d8d-a95c-e1934f0a1197",
+  "railway_final_status": "SLEEPING",
+  "legacy_redirect_deployment_id": "appgdep_6abd166f2a4481919ffb45f4103da9e3",
+  "legacy_browser_destination": "https://patchgoblin.vercel.app/",
+  "source_ci": {
+    "id": 36725818329,
+    "conclusion": "success",
+    "sha": "480f129e0a6d1504156429f59dc0d9a09e77586b"
+  },
+  "live_api_checks": {
+    "idempotent_retry_id": 11,
+    "idempotent_retry_status": "submitted",
+    "cross_origin_error": "Cross-origin requests are forbidden.",
+    "unauthorized_repository_error": "Choose an authorized repository and supported mode."
+  }
 }
