@@ -34,7 +34,10 @@ class Model:
         budget = self.max_tokens - self.tokens
         if budget < 1800 or self.calls >= 6:
             raise RuntimeError("Model budget exhausted")
-        payload = {"model": self.name, "messages": [{"role": "system", "content": SYSTEM},
+        instruction = SYSTEM
+        if evidence.get("mode") == "builder":
+            instruction += "\nCURRENT TASK IS BUILDER. There is no failure to repair. Do not update dependencies. Return exactly one file: .github/workflows/patchgoblin.yml. The candidate_workflow is a trusted tool proposal that preserves all detected checks. Use its full content verbatim unless evidence requires a supported adjustment. Explain the CI you are adding.\n"
+        payload = {"model": self.name, "messages": [{"role": "system", "content": instruction},
                    {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)[:32000]}],
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
         self.calls += 1

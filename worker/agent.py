@@ -109,9 +109,17 @@ class Agent:
                     if attempts > min(int(os.getenv("MAX_ATTEMPTS", "2")), 2):
                         raise RuntimeError("Patch attempt budget exhausted")
                     files = decision.get("files", {})
-                    if "uv.lock" in files:
-                        raise ValueError("Lockfiles must be refreshed by uv, never authored by the model")
-                    validate_patch(files, mode, originals)
+                    try:
+                        if "uv.lock" in files:
+                            raise ValueError("Lockfiles must be refreshed by uv, never authored by the model")
+                        validate_patch(files, mode, originals)
+                    except ValueError as exc:
+                        # Rejected candidates consume a patch attempt without touching the checkout.
+                        # Give the model concrete policy feedback within the original budget.
+                        evidence["rejected_candidate"] = {"reason":str(exc), "paths":list(files),
+                                                          "remaining_attempts":2-attempts}
+                        self.event("investigate", "Candidate rejected by patch policy; requesting a bounded correction")
+                        continue
                     self.event("patch", f"Applying candidate {attempts} within the dependency/workflow allowlist")
                     # Revert previous candidate before applying the next. Tests were never writable by the model.
                     for p in self.state["patch"]:

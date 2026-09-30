@@ -111,3 +111,24 @@ def test_terminal_jobs_are_idempotent(tmp_path):
     result = Agent(github, store, TestModel({}), SimulatedSandbox).execute({})
     assert result == store.previous
     assert github.calls == 0
+
+
+def test_rejected_candidate_gets_bounded_correction_without_execution(tmp_path):
+    fixture(tmp_path)
+
+    class CorrectingModel(TestModel):
+        calls = 0
+
+        def decide(self, evidence):
+            self.calls += 1
+            if self.calls == 1:
+                return {"action":"patch", "files":{"tests/test_a.py":"assert True\n"}}
+            assert evidence["rejected_candidate"]["remaining_attempts"] == 1
+            return {"action":"patch", "files":{"requirements.txt":"pytest\nrequests\n"}}
+
+    model = CorrectingModel({})
+    result = Agent(GitHubFixture(tmp_path), Store(), model, SimulatedSandbox).execute({"repo":"wauul/patchgoblin-lab","mode":"repair","run_id":1})
+    assert result["status"] == "verified"
+    assert result["metrics"]["patch_attempts"] == 2
+    assert "tests/test_a.py" not in result["patch"]
+    assert model.calls == 2
