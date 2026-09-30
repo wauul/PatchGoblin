@@ -7,7 +7,7 @@ type Job=Record<string,any>;
 const stages=['inspect','reproduce','investigate','patch','verify','submit'];
 const finished=['submitted','unsupported','failed','cancelled'];
 async function api(path:string,body?:any){const r=await fetch('/api'+path,body===undefined?undefined:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.error||'Request failed');return data;}
-const duration=(n:any)=>typeof n==='number'?(n<60?`${n.toFixed(1)}s`:`${Math.floor(n/60)}m ${Math.round(n%60)}s`):'Unavailable';
+const duration=(n:any)=>typeof n==='number'?(n<60?`${n.toFixed(1)}s`:`${Math.floor(Math.round(n)/60)}m ${Math.round(n)%60}s`):'Unavailable';
 function Mascot({small=false}:{small?:boolean}){return <svg className={small?'mascot small':'mascot'} viewBox="0 0 64 64" aria-label="PatchGoblin mascot"><path d="M8 20l17 7h14l17-7-9 22-9 12H26l-9-12z" fill="currentColor"/><path d="M21 33l9 3-9 3m22-6l-9 3 9 3" fill="#1b2d29"/><path d="M27 45h10" stroke="#1b2d29" strokeWidth="3" strokeLinecap="round"/></svg>}
 function App(){
  const [page,setPage]=useState('workbench'),[bootstrap,setBootstrap]=useState<any>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[history,setHistory]=useState<Job[]>([]),[job,setJob]=useState<Job|null>(null),[mode,setMode]=useState('repair'),[repo,setRepo]=useState(''),[runs,setRuns]=useState<any[]>([]),[run,setRun]=useState(''),[ref,setRef]=useState('main'),[tab,setTab]=useState('diagnosis'),[demo,setDemo]=useState(false);
