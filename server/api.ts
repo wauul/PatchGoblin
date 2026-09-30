@@ -54,8 +54,11 @@ export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):
   if(url.pathname==='/api/jobs'&&req.method==='GET'){
    const issues=await github(`/repos/${control}/issues?creator=${ownerLogin}&state=all&per_page=100`);
    const owned=issues.filter((i:Json)=>{try{return !i.pull_request&&issueRequest(i)}catch{return false}}).slice(0,30);
-   // List metadata cheaply; full evidence is loaded only for the selected job.
-   return response(owned.map((i:Json)=>({id:i.number,...JSON.parse(i.body),created_at:i.created_at,status:i.state==='closed'?'cancelled':'recorded'})));
+   // Resolve saved states in parallel, but return only compact owner-scoped metadata.
+   return response(await Promise.all(owned.map(async(i:Json)=>{
+    const input=issueRequest(i), state=await details(i);
+    return {id:i.number,repo:input.repo,mode:input.mode,ref:input.ref,run_id:input.run_id,created_at:i.created_at,status:state.status};
+   })));
   }
   if(url.pathname==='/api/jobs'&&req.method==='POST'){
    const input=await readBody();
