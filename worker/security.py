@@ -2,7 +2,7 @@
 import re
 from pathlib import PurePosixPath
 
-SECRET = re.compile(r"(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{20,}|Bearer\s+\S+)", re.I)
+SECRET = re.compile(r"(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]+|gsk_[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9_-]{20,}|postgres(?:ql)?://[^\s]+|Bearer\s+\S+)", re.I)
 
 
 def redact(text: str) -> str:

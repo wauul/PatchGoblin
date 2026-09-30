@@ -1,0 +1,16 @@
+.git
+.local
+.env
+.env.*
+.vercel
+.railway
+.openai
+.venv
+node_modules
+dist
+__pycache__
+.pytest_cache
+docs
+tests
+fixtures
+evaluations

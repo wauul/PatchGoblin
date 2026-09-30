@@ -4,7 +4,11 @@ A bounded AI agent that repairs Python dependency failures and builds missing Gi
 
 **Repository:** https://github.com/wauul/PatchGoblin
 
-**Live app:** https://patchgoblin.wauul.chatgpt.site (owner-private ChatGPT sign-in).
+**Production:** https://patchgoblin.vercel.app (owner-private Vercel Authentication).
+
+**Stack:** Vercel frontend/API, Groq GPT-OSS-20B inference, Neon Postgres durable jobs, and a Railway worker with disposable Railway/Docker execution sandboxes. The old Sites address redirects to production after cutover. Eight existing jobs were imported without changing their original evidence or PR links.
+
+**Migration verification:** [Builder PR #3](https://github.com/wauul/patchgoblin-lab/pull/3) and [repair PR #4](https://github.com/wauul/patchgoblin-lab/pull/4) both passed six unchanged sandbox tests and both remote CI events. Actual Groq usage: 1,341 and 5,576 tokens; agent execution: 46.95 and 59.86 seconds. [Deployment, configuration, costs, and verification](docs/production-migration.md).
 
 **Verified builder:** https://github.com/wauul/patchgoblin-lab/pull/1 — six unchanged tests passed in Docker; both push and pull-request GitHub Actions runs passed.
 
@@ -14,7 +18,7 @@ A bounded AI agent that repairs Python dependency failures and builds missing Gi
 
 ![Real repair and successful remote CI](docs/workbench-repair.jpg)
 
-Screenshot: local frontend connected to the deployed API through a loopback owner-service proxy. Credentials remain server-side. Normal hosted browser sign-in failed in the available in-app browser with an upstream HTML/JSON parsing error. The existing owner service credential was used to independently verify deployed API functionality, real agent execution, PR submission, and target CI.
+The two screenshots above document the original Sites/Qwen deployment. The new Vercel production flow was verified directly in the authenticated browser; see the migration report for current evidence.
 
 **Seeded lab:** https://github.com/wauul/patchgoblin-lab (`main`: missing CI; `broken-install`: intentional dependency conflict). Seeded jobs execute real model calls, Docker commands, and GitHub workflows. The separate illustrative demo executes nothing and consumes no model credits.
 
@@ -22,31 +26,34 @@ Screenshot: local frontend connected to the deployed API through a loopback owne
 
 Pip/uv Python repositories, simple single-job GitHub Actions workflows, Python 3.11–3.13. Supported investigation categories: missing declared dependencies, incompatible constraints, Python version mismatch, installation command errors, and uv lock drift with deterministic `uv lock` refresh. Required tests/checks and project runtime configuration cannot be weakened.
 
-The free deployed integration is scoped to allowlisted **public** repositories owned by the configured GitHub account. Initially it has access only to PatchGoblin and the seeded lab. Unsupported: application bugs/assertions, networking outages, secrets, private archives, Poetry/Pipenv, service or matrix jobs, conditional/custom shell steps, unknown third-party Actions, and non-Python providers. Unsupported results are reported without a success claim or PR.
+The deployed integration is scoped to allowlisted **public** repositories owned by the configured GitHub account. Initially it has access only to PatchGoblin and the seeded lab. Unsupported: application bugs/assertions, networking outages, secrets, private archives, Poetry/Pipenv, service or matrix jobs, conditional/custom shell steps, unknown third-party Actions, and non-Python providers. Unsupported results are reported without a success claim or PR.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  U[Authenticated owner] --> W[React workbench / Cloudflare Worker]
-  W --> J[GitHub issue: durable job request]
-  J --> A[GitHub Actions Python worker]
-  A --> M[Pinned Qwen Coder 7B / loopback inference]
-  A --> S[Disposable Docker sandbox]
-  A --> C[Durable state comment / result artifact]
+  U[Authenticated owner] --> W[Vercel React workbench / Node API]
+  W --> J[Neon durable job queue]
+  W --> A[Authenticated Railway wake endpoint]
+  J --> A
+  A --> M[Groq GPT-OSS-20B / strict JSON schema]
+  A --> S[Disposable Railway VM / restricted Docker]
+  A --> J
+  J --> W
+  A --> P[Verified GitHub branch and pull request]
+  P --> C[Remote GitHub Actions CI]
   C --> W
-  W --> P[Verified branch and pull request]
 ```
 
-State: `inspect → reproduce → investigate → patch → verify → submit`. The model selects investigation reads and patches. Deterministic code owns archive handling, command/path/patch policy, sandbox execution, persistence, cancellation, and submission. A verified patch becomes a PR when the authenticated workbench synchronizes the result; long-running work never happens in an HTTP handler. Submission is idempotent by job branch and checks that the base commit has not changed.
+State: `inspect → reproduce → investigate → patch → verify → submit`. The model selects investigation reads and patches. Deterministic code owns archive handling, command/path/patch policy, sandbox execution, persistence, cancellation, and submission. The Railway worker submits verified patches even when the browser closes; long-running work never happens in a Vercel handler. Submission is idempotent by job branch and checks that the base commit has not changed. The API supports retrying a failed PR submission.
 
-GitHub issues/comments are the durable storage layer. They survive frontend refreshes and runner restarts. A terminal job is never re-executed. An interrupted job that reached expensive execution stops safely instead of resetting its budget; the owner must explicitly start a new investigation. The last 30 jobs are listed from the latest 100 control-repository issues.
+Neon stores owner-scoped requests, idempotency keys, cancellation, bounded state, and exclusive 15-minute worker leases. PostgreSQL advisory locks enforce atomic enqueue limits and one active worker. The service drains the durable queue on authenticated wake and startup, without idle polling. A terminal job is never re-executed. Expired execution stops safely instead of resetting its budget; the owner must explicitly start a new investigation. The last 30 jobs are shown from the latest 100 owner records. Legacy GitHub issues/comments remain the historical import source.
 
 Model-authored patches are limited to four files and 24 KB. The model can request the narrow `refresh_lock` tool, which runs uv rather than generating a lockfile. Canonical uv locks are bounded at 128 KB. Durable results above GitHub's comment budget use gzip/base64 with SHA-256 and size verification; decoded state is capped at 250 KB and accepted only from trusted authors. Compression provides storage compatibility, not confidentiality; this integration supports public repositories only.
 
 ## Local setup
 
-Prerequisites: Node 22+, Python 3.11+, uv 0.8.22+, and Git. Live web jobs use the hosted Actions worker. A working Docker engine is needed only for local agent execution and evaluation; the interface and unit tests do not require it.
+Prerequisites: Node 22+, Python 3.11+, uv 0.8.22+, and Git. Live production jobs use the Railway worker. A working Docker engine is needed only for local agent execution and historical evaluation; the interface and unit tests do not require it.
 
 ```sh
 npm ci
@@ -58,7 +65,7 @@ node --import tsx scripts/local-server.ts
 npm run dev -- --port 5174
 ```
 
-Open the URL Vite prints. The local API binds to 127.0.0.1:8787 and supplies a local-only owner identity; hosted APIs require the authenticated identity forwarded by Sites. Never expose the local server to a network or add LOCAL_USER to production environment variables.
+Open the URL Vite prints. The local API binds to 127.0.0.1:8787 and supplies a local-only owner identity. Configure Neon and the worker endpoint in the ignored .env for local migration testing. Never expose the local server to a network or add LOCAL_USER to production environment variables. Hosted production requires Vercel Authentication on every deployment URL.
 
 ```sh
 npm test
@@ -67,15 +74,15 @@ uv run pytest -q
 uv run ruff check worker tests
 ```
 
-Both npm and uv lockfiles are committed. `npm run build` embeds the static React assets into `dist/server/index.js`, exporting the Cloudflare Worker `fetch` handler. The Worker is stateless; durable data is on GitHub.
+Both npm and uv lockfiles are committed. `npm run build:web` produces the Vercel frontend in dist/client; api/index.ts exports the Node Web Standard handler. `npm run build` additionally produces the old Sites Worker for the redirect and rollback. Dockerfile.worker builds the independent Railway service.
 
 ## GitHub permissions and credentials
 
 Use a fine-grained token selecting only the control and approved target repositories: Actions **read**, Contents **read/write**, Issues **read/write**, Pull requests **read/write**, Workflows **read/write**, Metadata **read**. This token is held only in the ignored local .env and the hosted runtime secret store. It never reaches browser assets, repository code, sandbox containers, or log/model evidence. PatchGoblin does not change repository secrets, branch protection, or merge PRs.
 
-The worker uses the short-lived Actions `GITHUB_TOKEN` with contents:read, actions:read, and issues:write. The control plane retrieves and redacts target CI logs before persisting a job because the worker token cannot read another repository's Actions log endpoint. The worker cannot write target contents. The authenticated control plane submits only a verified, allowlisted patch. Issue-triggered workers check the creator login and request fields; arbitrary users' issues do not execute code. Host credentials are omitted from checkout persistence and all Docker mounts.
+Vercel and Railway hold the scoped GitHub token server-side. The control plane retrieves and redacts target CI logs before saving the request; the worker rechecks immutable GitHub metadata and submits only verified, allowlisted patches. Only Railway holds the Groq and project-scoped Railway API tokens. A separate high-entropy wake secret authenticates Vercel to the worker. The downloaded repository never receives these credentials. The old Actions worker remains available for historical evaluation/rollback and does not consume Neon jobs.
 
-Private hosting uses ChatGPT sign-in and owner-only access. Default APIs scope jobs by a hash of the authenticated Site user and reject unauthenticated and cross-origin writes. This confirmed owner-private Site uses PRIVATE_OWNER_MODE=true because Sites authenticates requests at dispatch, including owner service credentials; its jobs share the private owner key. Never enable that adapter for a public/shared Site. Repository names and run IDs are validated, with a repository allowlist and eight jobs/hour cap. GitHub Actions enforces one worker at a time. Public multi-tenant operation and GitHub App installation are future work.
+Private hosting uses Vercel Authentication with protection set to ALL deployment URLs, including the production alias. The owner adapter is enabled only in protected production; preview requests fail closed. Client-supplied Sites identity headers are removed. Jobs retain the original private owner hash, preserving imported history. Cross-origin writes are rejected. Repository names and run IDs are validated, with a repository allowlist, eight jobs/hour cap, and one global worker lease. Public multi-tenant operation and GitHub App installation are future work.
 
 ## Sandbox
 
@@ -97,11 +104,15 @@ uv run python -m worker.evaluate --case pip-conflict --baseline
 
 Alternatively run **PatchGoblin evaluation** in GitHub Actions. It starts the pinned real model automatically with scripts/setup_runner_model.py and a masked ephemeral key. The setup script targets Ubuntu x64; local Windows evaluation requires a working Docker engine and a separately configured compatible model server. Artifacts include per-case evidence and aggregate JSON results. The deterministic baseline creates standard CI, fixes a missing -r, or adds the observed missing requests dependency, and runs the same sandbox checks. Results include reproduction, verified repairs, incorrect repair indicators, unsupported handling, builder acceptance, runtime, tool calls, tokens, and baseline runtime. Fixture execution is sandbox validation on a hosted runner, not successful remote target CI.
 
-Current local checks: **38 Python tests and 12 backend tests passed**, plus TypeScript checking and the production build. PatchGoblin's own GitHub CI is green. Deployed API evidence is in [docs/deployed-verification.json](docs/deployed-verification.json): idempotency, persisted history, repository allowlist, cross-origin rejection, and anonymous 401. Cancellation and successful result retrieval were verified through the browser after refresh. The mobile workbench was checked at 390px with no horizontal overflow; see [mobile screenshot](docs/workbench-mobile.jpg).
+Historical pre-migration local checks: **38 Python tests and 12 backend tests passed**, plus TypeScript checking and the production build. PatchGoblin's own GitHub CI is green. Deployed API evidence is in [docs/deployed-verification.json](docs/deployed-verification.json): idempotency, persisted history, repository allowlist, cross-origin rejection, and anonymous 401. Cancellation and successful result retrieval were verified through the browser after refresh. The mobile workbench was checked at 390px with no horizontal overflow; see [mobile screenshot](docs/workbench-mobile.jpg).
 
 The complete real-inference [12-case run](https://github.com/wauul/PatchGoblin/actions/runs/36715987219) passed **11/12 independent acceptance checks: 5/5 repairs, 2/3 builders, and 4/4 unsupported cases**, with **0/5 incorrect verified repairs**. The simple baseline passed 2/5 repairs, 3/3 builders, and 3/4 unsupported classifications. Agent totals: 11,715 measured tokens, 94 tool calls, 640.92 summed seconds; baseline 48.79 seconds and no model tokens. The model incorrectly rejected a valid uv builder. After a narrow instruction correction, its [targeted retest](https://github.com/wauul/PatchGoblin/actions/runs/36717541679) passed with 1,735 tokens, 9 tool calls, and 129.66 seconds. The original failure is retained; this is not a new complete 12/12 run. The retest's model explanation was contradictory even though its patch and actual checks were valid. Treat model narrative as a hypothesis and command evidence as verification. See [full results, per-case evidence, and development failures](docs/evaluation.md) and [aggregate JSON](docs/evaluation-results.json). Workflow completion alone is never counted as agent success.
 
 ## Deployment
+
+See [production migration](docs/production-migration.md) for Vercel, Neon, Groq, Railway, secrets, replay prevention, costs, and verification. Deploy current production with `vercel deploy --prod` and `railway up --service worker`. Railway infrastructure is declared in .railway/railway.ts; review `railway config plan` before applying it.
+
+### Historical Sites deployment / rollback
 
 1. Create a public GitHub control repository and copy `.github/workflows/agent.yml`, CI, and the Python worker. Adjust the owner and repository allowlist consistently in the workflow and runtime environment.
 2. Store the fine-grained GitHub token as the hosted **GITHUB_TOKEN secret**. Set CONTROL_REPO, ALLOWED_REPOS, OWNER_LOGIN as nonsecret runtime variables. Set PRIVATE_OWNER_MODE=true only after confirming sole-owner private Sites access; otherwise require the authenticated identity header. Do not put tokens in .openai/hosting.json.

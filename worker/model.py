@@ -23,12 +23,14 @@ Explain uncertainty. Do not claim verification: deterministic tools will do that
 
 class Model:
     def __init__(self):
-        self.base = os.getenv("MODEL_BASE_URL", "http://127.0.0.1:8081/v1").rstrip("/")
-        self.name = os.getenv("MODEL_NAME", "qwen-coder-7b")
-        self.key = os.getenv("MODEL_API_KEY")
+        self.base = os.getenv("MODEL_BASE_URL", "https://api.groq.com/openai/v1" if os.getenv("GROQ_API_KEY") else "http://127.0.0.1:8081/v1").rstrip("/")
+        self.groq = urlparse(self.base).hostname == "api.groq.com"
+        self.name = os.getenv("MODEL_NAME", "openai/gpt-oss-20b" if self.groq else "qwen-coder-7b")
+        self.key = os.getenv("GROQ_API_KEY") if self.groq else os.getenv("MODEL_API_KEY")
         if not self.key:
             raise RuntimeError("No server-side model credential configured")
         self.tokens = 0
+        self.prompt_tokens = self.completion_tokens = 0
         self.calls = 0
         self.usage_available = True
         self.max_tokens = min(int(os.getenv("MAX_MODEL_TOKENS", "12000")), 20000)
@@ -69,6 +71,16 @@ class Model:
                    "max_tokens": min(2200, budget), "temperature": 0.1, "response_format": {"type": "json_object"}}
         if urlparse(self.base).hostname in {"127.0.0.1", "localhost"}:
             payload["response_format"]["schema"] = schema
+        if self.groq:
+            schema["properties"]["files"]={"type":"array","items":{"type":"object","properties":{
+                "path":{"type":"string","enum":permitted},"content":{"type":"string"}},
+                "required":["path","content"],"additionalProperties":False}}
+            schema["required"]=list(schema["properties"])
+            payload["response_format"]={"type":"json_schema","json_schema":{"name":"patchgoblin_decision","strict":True,"schema":schema}}
+            payload["messages"][0]["content"] += "\nThe Groq transport schema represents files as an array of {path,content} objects. Return [] for no edits. Follow the transport schema.\n"
+            if evidence.get('mode')=='builder':
+                payload['messages'][0]['content'] += '\nThe repository has no CI. Describe the missing workflow you are adding in diagnosis; do not say no changes are required simply because the supplied draft is valid.\n'
+            payload["reasoning_effort"]="low"
         timeout = min(480, max(1, getattr(self, "deadline", time.monotonic()+480)-time.monotonic()))
         with httpx.Client(timeout=timeout) as client:
             headers = {"Authorization": "Bearer " + self.key}
@@ -86,7 +98,7 @@ class Model:
             available = min(budget, int(os.getenv("MODEL_CONTEXT_TOKENS", "8192"))) - input_tokens
             if available < 256:
                 raise RuntimeError("Model token budget cannot cover this prompt and a useful response")
-            payload["max_tokens"] = min(900, available)
+            payload["max_tokens"] = min(2000 if self.groq else 900, available)
             self.calls += 1
             try:
                 response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
@@ -103,13 +115,28 @@ class Model:
         usage = result.get("usage")
         if usage:
             self.tokens += usage.get("total_tokens", 0)
+            self.prompt_tokens += usage.get("prompt_tokens",0)
+            self.completion_tokens += usage.get("completion_tokens",0)
         else:
             self.usage_available = False
             self.tokens += budget  # Conservatively stop rather than spend an unmeasured budget.
         content = result["choices"][0]["message"]["content"]
-        return json.loads(content)
+        decision=json.loads(content)
+        if self.groq and isinstance(decision.get("files"),list):
+            files=decision["files"]
+            if len(files)>4 or len({f["path"] for f in files})!=len(files):
+                raise ValueError("Model files exceeded the unique path budget")
+            decision["files"]={f["path"]:f["content"] for f in files}
+        return decision
 
     def metrics(self) -> dict:
+        if self.groq:
+            return {"model":self.name,"provider":"groq","model_calls":self.calls,
+                    "model_tokens":self.tokens if self.usage_available else None,
+                    "prompt_tokens":self.prompt_tokens if self.usage_available else None,
+                    "completion_tokens":self.completion_tokens if self.usage_available else None,
+                    "estimated_cost_usd":round((self.prompt_tokens*0.075+self.completion_tokens*0.30)/1_000_000,6) if self.usage_available and self.name=="openai/gpt-oss-20b" else None,
+                    "cost_note":"Estimate uses published GPT-OSS-20B token list rates; actual account charges are unavailable. Production uses the Groq free tier."}
         return {"model": self.name, "model_calls": self.calls,
                 "model_tokens": self.tokens if self.usage_available else None,
                 "estimated_cost_usd": None, "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing."}
