@@ -10,7 +10,7 @@ Small dependency patches and CI updates, backed by actual command evidence. Patc
 
 The public application runs on **Vercel**, inference uses **Groq GPT-OSS-20B**, durable jobs/account data use **Neon Postgres**, and the **Railway** worker executes checks in disposable Railway VMs with restricted Docker containers. The old Sites address redirects to Vercel. Historical results remain identifiable; illustrative demos are labeled and execute nothing.
 
-![Actual Node builder evidence](docs/product-node-builder.png)
+The **Patch Bench** identity carries the existing goblin's forest and lime colors through marketing, workspace, documentation and the extension. Light/dark appearance uses one sun/moon button; styled English/French menus and appearance persist. See [design system](DESIGN.md), [design coverage and verification](docs/design-coverage.md) and [design sources/licenses](docs/design-resources.md).
 
 ## Web application
 
