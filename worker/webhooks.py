@@ -81,6 +81,30 @@ def enqueue(repo, mode, key, request, delay=0):
         ).fetchone()
 
 
+def record_remote_ci(repo, installation_id, run):
+    """Agent branches only update their receipt; they never create another job."""
+    github = InstallationGitHub(installation_id, repo["id"], repo["full_name"])
+    try:
+        latest = github.request("GET", f"/repos/{repo['full_name']}/actions/runs/{run['id']}")
+        receipt = {
+            "id": latest["id"],
+            "name": latest["name"],
+            "status": latest["status"],
+            "conclusion": latest["conclusion"],
+            "url": latest["html_url"],
+        }
+        with connect() as db:
+            db.execute(
+                """UPDATE patchgoblin_jobs SET state=jsonb_set(state,'{remote_ci}',
+                COALESCE((SELECT jsonb_agg(item) FROM jsonb_array_elements(COALESCE(state->'remote_ci','[]')) item
+                          WHERE item->>'id'<>%s),'[]'::jsonb)||%s::jsonb),updated_at=now()
+                WHERE repository_id=%s AND state->>'pr_sha'=%s AND owner_key NOT LIKE 'deleted:%%'""",
+                (str(latest["id"]), json.dumps([receipt]), repo["id"], latest["head_sha"]),
+            )
+    finally:
+        github.client.close()
+
+
 def process(delivery):
     data = delivery["payload"]
     event = delivery["event"]
@@ -104,7 +128,16 @@ def process(delivery):
             "SELECT r.* FROM pg_repositories r JOIN pg_installations i ON i.id=r.installation_id WHERE r.id=%s AND r.installation_id=%s AND r.active AND i.active",
             (delivery["repository_id"], installation_id),
         ).fetchone()
-    if not repo or not repo["enabled"] or repo["paused"]:
+    if not repo:
+        return
+    if (
+        event == "workflow_run"
+        and data.get("action") == "completed"
+        and data["workflow_run"]["head_branch"].startswith("codex/patchgoblin-")
+    ):
+        record_remote_ci(repo, installation_id, data["workflow_run"])
+        return
+    if not repo["enabled"] or repo["paused"]:
         return
     branch = data.get("ref", "").removeprefix("refs/heads/")
     if branch.startswith("codex/patchgoblin-"):
@@ -168,6 +201,13 @@ def process(delivery):
             )
             if permission.get("permission") not in {"write", "maintain", "admin"}:
                 return
+            sender_id = data["sender"]["id"]
+            if permission.get("user", {}).get("id") != sender_id:
+                return
+            with connect() as db:
+                registered = db.execute("SELECT id FROM pg_accounts WHERE id=%s", (sender_id,)).fetchone()
+            if not registered:
+                return  # The linked web workbench provides sign-in before investigation.
             run_id = int(external.split(":")[1])
             run = github.request("GET", f"/repos/{repo['full_name']}/actions/runs/{run_id}")
             if (
@@ -176,9 +216,9 @@ def process(delivery):
                 and not run["head_branch"].startswith("codex/patchgoblin-")
             ):
                 enqueue(
-                    repo,
+                    {**repo, "controller_id": sender_id},
                     "repair",
-                    f"native-repair-{run_id}-{delivery['id']}",
+                    f"native-repair-{run_id}-{run.get('run_attempt', 1)}",
                     {"run_id": run_id, "ref": run["head_branch"], "sha": run["head_sha"]},
                 )
         finally:
@@ -187,6 +227,13 @@ def process(delivery):
         # Every push is inexpensive metadata analysis; only an actual coverage gap calls a model.
         mode = "maintenance" if repo["auto_maintenance"] else "builder" if repo["auto_builder"] else None
         if mode:
+            github = InstallationGitHub(installation_id, repo["id"], repo["full_name"])
+            try:
+                current = github.request("GET", f"/repos/{repo['full_name']}/commits/{branch}")
+                if current["sha"] != data["after"]:
+                    return  # An out-of-order push cannot supersede the current repository head.
+            finally:
+                github.client.close()
             enqueue(repo, mode, "coverage-" + data["after"], {"ref": branch, "sha": data["after"]}, 15)
     if (
         event == "pull_request"
@@ -228,9 +275,10 @@ def drain_deliveries():
                 (row["id"],),
             )
     except Exception as exc:
+        busy = "PG_ACTIVE_JOB" in str(exc)
         with connect() as db:
             db.execute(
                 "UPDATE pg_deliveries SET status=%s,available_at=now()+interval '15 seconds',lease_expires_at=NULL,error=%s WHERE id=%s",
-                ("pending" if row["attempts"] < 3 else "failed", redact(str(exc))[:300], row["id"]),
+                ("pending" if row["attempts"] < (45 if busy else 3) else "failed", redact(str(exc))[:300], row["id"]),
             )
     return True

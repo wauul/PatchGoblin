@@ -84,18 +84,25 @@ def submit(github, job_id, request, state, cancelled=lambda: False):
         head = github.request("GET", prefix + "/commits/" + branch)
         if head["commit"]["tree"]["sha"] != tree["sha"]:
             raise ValueError("Submission branch differs from the verified patch")
-        before = (
-            "\n".join(f"- {v['command']}: exit {v['exit_code']}" for v in state.get("reproduction", []))
-            or "No existing CI workflow."
+        before = "\n".join(f"- {v['command']}: exit {v['exit_code']}" for v in state.get("reproduction", [])) or (
+            "Existing workflows did not cover the manifest-backed requirements below."
+            if request["mode"] == "maintenance"
+            else "No existing CI workflow."
         )
         after = "\n".join(f"- {v['command']}: exit {v['exit_code']} ({v['duration_seconds']}s)" for v in checks)
         metrics = state.get("metrics", {})
         workbench = os.getenv("APP_URL", "https://patchgoblin.vercel.app")
+        change_sketch = "\n".join("+ " + p for p in files)
+        blast = "dependencies" if request["mode"] == "repair" else "CI"
         body = f"""## Summary
 
 {state["diagnosis"]}
 
 Changed files: {", ".join(files)}
+
+```diff
+{change_sketch}
+```
 
 ## Evidence
 
@@ -117,7 +124,7 @@ Model: {metrics.get("model", "unavailable")} via Groq. Usage: {metrics.get("mode
 
 **Door:** two-way
 
-**Blast Radius:** dependencies
+**Blast Radius:** {blast}
 
 Tests and required checks were preserved. No automatic merge.
 """

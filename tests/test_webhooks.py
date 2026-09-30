@@ -1,0 +1,108 @@
+"""Delivery policy tests; provider/database doubles are explicit unit fixtures."""
+
+from contextlib import contextmanager
+from worker import webhooks
+
+
+class DB:
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def execute(self, sql, args=()):
+        self.calls.append((sql, args))
+        return self
+
+    def fetchone(self):
+        return self.result
+
+
+def fake_database(monkeypatch, result):
+    db = DB(result)
+
+    @contextmanager
+    def connection():
+        yield db
+
+    monkeypatch.setattr(webhooks, "connect", connection)
+    return db
+
+
+def delivery(event, payload):
+    return {"id": "unit-delivery", "event": event, "installation_id": 10, "repository_id": 20, "payload": payload}
+
+
+REPO = {
+    "id": 20,
+    "full_name": "owner/repo",
+    "enabled": True,
+    "paused": False,
+    "default_branch": "main",
+    "auto_repair": True,
+    "auto_builder": False,
+    "auto_maintenance": True,
+}
+
+
+def test_agent_workflow_receipt_never_enqueues_a_job(monkeypatch):
+    fake_database(monkeypatch, REPO)
+    receipts = []
+    monkeypatch.setattr(webhooks, "record_remote_ci", lambda *args: receipts.append(args))
+    monkeypatch.setattr(webhooks, "enqueue", lambda *args: (_ for _ in ()).throw(AssertionError("Loop")))
+    webhooks.process(
+        delivery(
+            "workflow_run",
+            {"action": "completed", "workflow_run": {"head_branch": "codex/patchgoblin-neon-1", "id": 1}},
+        )
+    )
+    assert len(receipts) == 1
+
+
+def test_agent_push_and_pr_never_enqueue(monkeypatch):
+    fake_database(monkeypatch, REPO)
+    monkeypatch.setattr(webhooks, "enqueue", lambda *args: (_ for _ in ()).throw(AssertionError("Loop")))
+    webhooks.process(delivery("push", {"ref": "refs/heads/codex/patchgoblin-maintenance"}))
+    webhooks.process(
+        delivery(
+            "pull_request",
+            {
+                "action": "opened",
+                "pull_request": {"head": {"ref": "codex/patchgoblin-maintenance"}, "user": {"login": "bot"}},
+            },
+        )
+    )
+
+
+def test_disabled_or_paused_repo_never_starts_automation(monkeypatch):
+    monkeypatch.setattr(webhooks, "enqueue", lambda *args: (_ for _ in ()).throw(AssertionError("Disabled")))
+    for state in [{"enabled": False}, {"paused": True}]:
+        fake_database(monkeypatch, {**REPO, **state})
+        webhooks.process(delivery("push", {"ref": "refs/heads/main", "after": "new-sha"}))
+
+
+def test_out_of_order_push_does_not_supersede_latest_commit(monkeypatch):
+    fake_database(monkeypatch, REPO)
+
+    class Client:
+        def close(self):
+            pass
+
+    class Github:
+        client = Client()
+
+        def __init__(self, *args):
+            pass
+
+        def request(self, *args):
+            return {"sha": "current-sha"}
+
+    monkeypatch.setattr(webhooks, "InstallationGitHub", Github)
+    monkeypatch.setattr(webhooks, "enqueue", lambda *args: (_ for _ in ()).throw(AssertionError("Stale event")))
+    webhooks.process(delivery("push", {"ref": "refs/heads/main", "after": "old-sha"}))
+
+
+def test_active_job_backpressure_remains_retryable_after_three_attempts(monkeypatch):
+    db = fake_database(monkeypatch, {"id": "retry-unit", "attempts": 3})
+    monkeypatch.setattr(webhooks, "process", lambda row: (_ for _ in ()).throw(RuntimeError("PG_ACTIVE_JOB")))
+    assert webhooks.drain_deliveries()
+    assert db.calls[-1][1][0] == "pending"
