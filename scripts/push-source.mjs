@@ -6,7 +6,7 @@ if(process.argv.includes('--stdin')){
  if(process.stdin.isTTY)process.stdin.setRawMode(true);
  process.stdin.resume();
  console.log('Ready for source credential JSON on stdin (input is hidden).');
- input=await new Promise(resolve=>{let value='';const collect=chunk=>{value+=chunk.toString();if(value.includes('\n')){process.stdin.off('data',collect);resolve(value.trim());}};process.stdin.on('data',collect);});
+ input=await new Promise(resolve=>{let value='';const collect=chunk=>{value+=chunk.toString();if(/[\r\n]/.test(value)){process.stdin.off('data',collect);resolve(value.trim());}};process.stdin.on('data',collect);});
  process.stdin.pause();
 }
 const config=input.trim()?JSON.parse(input):{};
