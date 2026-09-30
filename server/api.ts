@@ -81,7 +81,7 @@ export async function handleApi(req:Request,env:Env,fetcher:typeof fetch=fetch):
      const r=await fetcher(`https://api.github.com/repos/${input.repo}/actions/jobs/${job.id}/logs`,{redirect:'manual',headers:{Authorization:'Bearer '+env.GITHUB_TOKEN,Accept:'application/vnd.github+json','User-Agent':'PatchGoblin'}});
      const location=r.headers.get('location');
      // Never forward the repository credential to GitHub's log-storage redirect.
-     const log=r.status===302&&location?await fetcher(location,{redirect:'error'}):r;
+     const log=r.status===302&&location?await fetcher(location,{redirect:'manual'}):r;
      if(!log.ok)throw new ApiError(502,`Cannot retrieve failed CI logs (${log.status}).`);
      logs.push(filteredLogs(await log.text()));
     }
