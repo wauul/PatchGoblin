@@ -31,8 +31,8 @@ jobs:
       - run: uv sync --frozen
       - uses: actions/cache@v4
         with:
-          path: .local/model-runtime/qwen-coder-3b.gguf
-          key: qwen-coder-3b-724fb256
+          path: .local/model-runtime/qwen-coder-7b.gguf
+          key: qwen-coder-7b-509287f7
       - name: Start real inference on the disposable runner
         run: uv run --frozen python scripts/setup_runner_model.py
       - name: Bounded agent (credentials remain on the host)

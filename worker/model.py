@@ -23,7 +23,7 @@ Explain uncertainty. Do not claim verification: deterministic tools will do that
 class Model:
     def __init__(self):
         self.base = os.getenv("MODEL_BASE_URL", "http://127.0.0.1:8081/v1").rstrip("/")
-        self.name = os.getenv("MODEL_NAME", "qwen-coder-3b")
+        self.name = os.getenv("MODEL_NAME", "qwen-coder-7b")
         self.key = os.getenv("MODEL_API_KEY")
         if not self.key:
             raise RuntimeError("No server-side model credential configured")
@@ -65,10 +65,10 @@ class Model:
                 input_tokens = len(counted.json()["tokens"]) + 32
             else:
                 input_tokens = sum(len(m["content"].encode()) for m in payload["messages"]) + 256
-            available = budget - input_tokens
+            available = min(budget, int(os.getenv("MODEL_CONTEXT_TOKENS", "8192"))) - input_tokens
             if available < 256:
                 raise RuntimeError("Model token budget cannot cover this prompt and a useful response")
-            payload["max_tokens"] = min(2200, available)
+            payload["max_tokens"] = min(1400, available)
             self.calls += 1
             response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
         if response.status_code != 200:
@@ -89,4 +89,4 @@ class Model:
     def metrics(self) -> dict:
         return {"model": self.name, "model_calls": self.calls,
                 "model_tokens": self.tokens if self.usage_available else None,
-                "estimated_cost_usd": None, "cost_note": "No billing meter available. Default inference is a real Qwen Coder 3B model on the disposable free public Actions runner, with no external model billing."}
+                "estimated_cost_usd": None, "cost_note": "No billing meter available. Inference runs a real local Qwen Coder model on the disposable free public Actions runner, with no external model billing."}

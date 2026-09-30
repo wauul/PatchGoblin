@@ -33,3 +33,21 @@ test('CI log redirect receives no credential and persisted evidence is redacted'
  const stored=JSON.parse(issue.body);assert.ok(stored.ci_logs.includes('ModuleNotFoundError'));
  assert.ok(!stored.ci_logs.includes('private-value'));assert.ok(!stored.ci_logs.includes('sensitive-value'));
 });
+test('hourly cap rejects new work while an idempotent retry returns its existing job',async()=>{
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('alice|wauul/PatchGoblin'));
+ const owner=Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);
+ const issues=Array.from({length:8},(_,i)=>({number:i+1,title:'PatchGoblin job builder key',state:'open',created_at:new Date().toISOString(),user:{login:'wauul'},body:JSON.stringify({owner,repo:'wauul/patchgoblin-lab',mode:'builder',key:'existing-key-number-'+i})}));
+ const fetcher=async(url:any,options:any)=>{
+  assert.equal(options.method,'GET');
+  const path=String(url);
+  if(path.endsWith('/user'))return json({login:'wauul'});
+  if(path.endsWith('/repos/wauul/patchgoblin-lab'))return json({permissions:{push:true},private:false,default_branch:'main'});
+  if(path.includes('/issues?'))return json(issues);
+  if(path.includes('/comments?'))return json([]);
+  throw Error('Unexpected request');
+ };
+ const limit=await handleApi(request('/jobs',{repo:'wauul/patchgoblin-lab',mode:'builder',key:'new-key-number-123'}),env,fetcher as typeof fetch);
+ assert.equal(limit.status,429);
+ const retry=await handleApi(request('/jobs',{repo:'wauul/patchgoblin-lab',mode:'builder',key:'existing-key-number-0'}),env,fetcher as typeof fetch);
+ assert.equal(retry.status,200);assert.equal((await retry.json()).id,1);
+});
