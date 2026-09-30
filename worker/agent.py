@@ -97,6 +97,11 @@ class Agent:
                     self.state["category"] = redact(str(decision.get("category", "")))[:100]
                     self.state["evidence"] = [redact(str(x))[:1000] for x in decision.get("evidence", [])[:8]]
                     action = decision.get("action")
+                    if action == "refresh_lock":
+                        if mode != "repair" or project["manager"] != "uv":
+                            raise ValueError("Lock refresh tool requires a uv repair job")
+                        action = "patch"
+                        decision["files"], decision["refresh_lock"] = {}, True
                     if action == "unsupported":
                         raise Unsupported(self.state["diagnosis"] or "Model found insufficient supported evidence")
                     if action == "read":
@@ -122,7 +127,7 @@ class Agent:
                         # Give the model concrete policy feedback within the original budget.
                         evidence["rejected_candidate"] = {"reason":str(exc), "paths":list(files),
                                                           "remaining_attempts":2-attempts}
-                        self.event("investigate", "Candidate rejected by patch policy; requesting a bounded correction")
+                        self.event("investigate", "Candidate rejected by patch policy: " + str(exc)[:300])
                         continue
                     self.event("patch", f"Applying candidate {attempts} within the dependency/workflow allowlist")
                     # Revert previous candidate before applying the next. Tests were never writable by the model.
