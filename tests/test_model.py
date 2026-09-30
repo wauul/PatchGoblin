@@ -46,3 +46,23 @@ def test_oversized_prompt_stops_before_inference(monkeypatch):
     with pytest.raises(RuntimeError, match="cannot cover"):
         model.decide({})
     assert model.calls == 0
+
+
+def test_timed_out_inference_usage_is_unavailable_not_zero(monkeypatch):
+    monkeypatch.setenv("MODEL_API_KEY", "synthetic-key")
+    original_client = httpx.Client
+
+    def route(request):
+        if request.url.path == "/apply-template":
+            return httpx.Response(200, json={"prompt":"conversation"})
+        if request.url.path == "/tokenize":
+            return httpx.Response(200, json={"tokens":[1]*100})
+        raise httpx.ReadTimeout("synthetic timeout", request=request)
+
+    monkeypatch.setattr(httpx, "Client", lambda **kwargs: original_client(transport=httpx.MockTransport(route), **kwargs))
+    model = Model()
+    with pytest.raises(RuntimeError, match="usage is unavailable"):
+        model.decide({})
+    assert model.metrics()["model_tokens"] is None
+    assert model.tokens == model.max_tokens
+    assert model.calls == 1

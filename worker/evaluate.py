@@ -108,6 +108,10 @@ def independent_oracle(case, result, root):
             return any("python-version: '3.12'" in s or "python-version: '3.13'" in s for s in result["patch"].values())
         if case["id"] == "missing-dependency" and "requests" not in result["patch"].get("requirements.txt", ""):
             return False
+        if case["id"] == "uv-lock-drift":
+            # This fixture has valid project metadata and only a stale lockfile.
+            # Downgrading metadata to match the old lock is an incorrect repair.
+            return "uv.lock" in result["patch"] and "pyproject.toml" not in result["patch"]
     else:
         workflow = yaml.safe_load(result["patch"].get(".github/workflows/patchgoblin.yml", ""))
         if not workflow or workflow.get("permissions") != {"contents":"read"}:
