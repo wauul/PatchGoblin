@@ -67,6 +67,8 @@ const traceKeys = ['trace_id','span_id','parent_span_id','sampled'];
 function cleanTrace(value: any) {
   const out:any = {};
   for (const key of traceKeys) if (key === 'sampled' ? typeof value?.[key] === 'boolean' : typeof value?.[key] === 'string' && /^[a-f0-9]{16,32}$/.test(value[key])) out[key] = value[key];
+  if (operations.has(value?.op)) out.op = value.op;
+  if (statuses.has(value?.status)) out.status = value.status;
   return out;
 }
 export function sanitizeSpan(span: any): any {
@@ -108,7 +110,7 @@ export function sanitizeEvent(event: any): any {
   if (event.message) out.message = 'PatchGoblin operation failed';
   out.breadcrumbs = (event.breadcrumbs || []).map(sanitizeBreadcrumb).filter(Boolean).slice(-20);
   if (event.type === 'transaction') {
-    out.transaction = route(event.transaction || 'unknown');
+    out.transaction = route(event.tags?.route || event.transaction || 'unknown');
     out.transaction_info = {source:'route'};
     out.start_timestamp = event.start_timestamp;
     out.spans = (event.spans || []).slice(0,100).map(sanitizeSpan);

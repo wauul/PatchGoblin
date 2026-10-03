@@ -11,7 +11,7 @@ export function initTelemetry(env: Record<string,string|undefined> = process.env
   if (!config.enabled) return;
   const budget=volume(env);
   try {
-    Sentry.init({...config,...options,defaultIntegrations:false, integrations:[Sentry.onUncaughtExceptionIntegration(),Sentry.onUnhandledRejectionIntegration()],dataCollection,includeServerName:false,maxBreadcrumbs:20,transportOptions:{bufferSize:30},tracePropagationTargets:[],beforeSend:(event,hint)=>expectedError(hint.originalException)||!budget.event()?null:sanitizeEvent(event),beforeSendSpan:sanitizeSpan,beforeBreadcrumb:sanitizeBreadcrumb,beforeSendLog:log=>env.SENTRY_LOGS_ENABLED === 'true'&&budget.log()?sanitizeLog(log):null});
+    Sentry.init({...config,...options,traceLifecycle:'static',beforeSendTransaction:sanitizeEvent,defaultIntegrations:false, integrations:[Sentry.onUncaughtExceptionIntegration(),Sentry.onUnhandledRejectionIntegration()],dataCollection,includeServerName:false,maxBreadcrumbs:20,transportOptions:{bufferSize:30},tracePropagationTargets:[],beforeSend:(event,hint)=>expectedError(hint.originalException)||!budget.event()?null:sanitizeEvent(event),beforeSendSpan:Sentry.withStaticSpan(sanitizeSpan),beforeBreadcrumb:sanitizeBreadcrumb,beforeSendLog:log=>env.SENTRY_LOGS_ENABLED === 'true'&&budget.log()?sanitizeLog(log):null});
     Sentry.setTag('service','api'); initialized = true;
   } catch { /* A malformed/unavailable telemetry configuration never blocks startup. */ }
 }
@@ -56,7 +56,7 @@ export function requestScope<T>(request:Request, fn:(requestId:string)=>Promise<
   try {
    const fresh = new Sentry.Scope();fresh.setClient(Sentry.getClient());
    return Sentry.withIsolationScope(fresh,scope => {
-    scope.setTag('service','api');scope.setTag('route',route(request.url));scope.setContext('operation',{request_id:requestId});
+    scope.setTag('service','api');scope.setTag('operation','request');scope.setTag('route',route(request.url));scope.setContext('operation',{request_id:requestId});
     const trace=traceMetadata({'sentry-trace':request.headers.get('sentry-trace'),baggage:request.headers.get('baggage')});
     return Sentry.continueTrace({sentryTrace:trace['sentry-trace'],baggage:trace.baggage},()=>span('request',invoke));
    });

@@ -69,9 +69,22 @@ test('real SDK transport: caught API faults, deduplication, concurrent isolation
   assert.equal(events.length,3);assert.equal(JSON.stringify(envelopes).includes(secret),false);
   assert.equal(events[0].contexts.operation.request_id===events[1].contexts.operation.request_id,false);
   assert.ok(events.some((e:any)=>e.contexts.trace.trace_id==='a'.repeat(32)));
-  const streamed=envelopes.flatMap(e=>e[1]).filter((item:any)=>item[0].type==='span');assert.ok(streamed.length>0);
-  const receivedSpans=streamed.flatMap((item:any)=>item[1].items);
-  assert.ok(receivedSpans.every((item:any)=>item.attributes['sentry.environment']?.value==='verification'));
-  assert.ok(receivedSpans.every((item:any)=>/^[a-f0-9]{16}$/.test(item.attributes['sentry.segment.id']?.value)));
+  const transactions=envelopes.flatMap(e=>e[1]).filter((item:any)=>item[0].type==='transaction').map((item:any)=>item[1]);
+  assert.ok(transactions.length>0);
+  assert.ok(transactions.every((item:any)=>item.environment==='verification' && item.tags.service==='api'));
+  assert.ok(transactions.every((item:any)=>item.contexts.trace.op==='request'));
+  assert.ok(transactions.some((item:any)=>item.transaction==='/api/github/webhook' && item.spans.some((span:any)=>span.op==='wake')));
+  const countCheckIns=()=>envelopes.flatMap(e=>e[1]).filter((item:any)=>item[0].type==='check_in').map((item:any)=>item[1]);
+  const cronEnv={CRON_SECRET:'controlled-fixture'};
+  const denied=await handleProduct(new Request('https://patchgoblin.vercel.app/api/retention'),cronEnv,fetch,async()=>{throw Error('Unauthorized cron must not access SQL');});
+  assert.equal(denied.status,401);assert.equal(countCheckIns().length,0);
+  const cron=()=>new Request('https://patchgoblin.vercel.app/api/retention',{headers:{authorization:'Bearer controlled-fixture'}});
+  const completed=await handleProduct(cron(),cronEnv,fetch,async sql=>{assert.equal(sql,'SELECT pg_retention()');return [];});
+  assert.equal(completed.status,200);
+  const failed=await handleProduct(cron(),cronEnv,fetch,async()=>{throw new TypeError(secret);});
+  assert.equal(failed.status,500);
+  await flushTelemetry();
+  const checkIns=countCheckIns();assert.deepEqual(checkIns.map((item:any)=>item.status),['in_progress','ok','in_progress','error']);
+  assert.equal(checkIns[0].check_in_id,checkIns[1].check_in_id);assert.equal(checkIns[2].check_in_id,checkIns[3].check_in_id);
  } finally {await Sentry.close(1000);}
 });

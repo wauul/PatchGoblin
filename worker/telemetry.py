@@ -91,9 +91,14 @@ def durable_trace():
 
 
 def _trace(data):
-    return {key: value for key, value in (data or {}).items()
+    out = {key: value for key, value in (data or {}).items()
             if key in ('trace_id', 'span_id', 'parent_span_id') and isinstance(value, str)
             and re.fullmatch(r'[a-f0-9]{16,32}', value)}
+    if (data or {}).get('op') in OPERATIONS:
+        out['op'] = data['op']
+    if (data or {}).get('status') in STATUSES:
+        out['status'] = data['status']
+    return out
 
 
 def sanitize_span(span):
