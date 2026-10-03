@@ -1,4 +1,4 @@
-import {rate} from './privacy';
+import {rate} from './privacy.js';
 export function volume(env:Record<string,any>) {
  const raw=Number(env.SENTRY_MAX_EVENTS_PER_MINUTE??60);
  const max=Number.isFinite(raw)&&raw>=0&&raw<=1000?Math.floor(raw):60;
