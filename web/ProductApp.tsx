@@ -1769,11 +1769,21 @@ function Extension() {
           "PatchGoblin\u2019s Chrome and Edge extension recognizes repository and Actions run pages. It opens the authenticated workbench with the right repository and run selected.",
         )}
       </p>
-      <a className="primary" href="/patchgoblin-extension.zip">
+      <h2>{t("Available on the Chrome Web Store")}</h2>
+      <p>
+        {t(
+          "Install PatchGoblin from the Chrome Web Store, then pin it to your toolbar and open it on a GitHub repository or Actions run.",
+        )}
+      </p>
+      <a className="primary" href="https://chromewebstore.google.com/detail/hiilcimbjiioafbbpjngamcnnigonglf">
+        {t("Install from Chrome Web Store")}
+      </a>
+      <h2>{t("Install unpacked")}</h2>
+      <p>{t("For Microsoft Edge or manual installation, download and extract the package below.")}</p>
+      <a href="/patchgoblin-extension.zip" download>
         <Download aria-hidden="true" size={17} />
         {t("Download extension package")}
       </a>
-      <h2>{t("Install unpacked")}</h2>
       <ol>
         <li>{t("Download and extract the package.")}</li>
         <li>
@@ -1811,7 +1821,7 @@ function Extension() {
       </p>
       <p>
         {t(
-          "This is an unpacked package, not a store listing. Reproducible build and publication instructions are in the source README.",
+          "The download above is an unpacked package. Microsoft Edge installation currently uses this package. Reproducible build instructions are in the source README.",
         )}
       </p>
     </ReadingFrame>
@@ -1932,7 +1942,7 @@ function Information({ page, config }: any) {
             [
               t("Is the extension in a store?"),
               t(
-                "The downloadable unpacked package is not described as store-listed. Store publication depends on account access and any registration fee.",
+                "Yes. PatchGoblin is available on the Chrome Web Store. The extension page also offers an unpacked package for Microsoft Edge or manual installation.",
               ),
             ],
           ].map(([q, a]) => (

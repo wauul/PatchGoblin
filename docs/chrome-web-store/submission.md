@@ -1,6 +1,8 @@
 # PatchGoblin Chrome Web Store submission
 
-Prepared September 30, 2026. Status: developer registered; package upload blocked by Google's two-step-verification requirement. Not submitted or approved. Publisher ID: `5684b4d1-782e-472d-93a2-7a35af14aa87`; registered account: `waelfezari@gmail.com`; public contact: `waelfeza@gmail.com`.
+Submitted September 30, 2026. Google confirmed **Pending review** (`En attente d'examen`) and displayed “Votre extension a été envoyée pour examen.” Automatic public publication after approval is enabled. Package, listing text, icon, promotional tile, privacy disclosures, reviewer instructions and a labeled popup preview screenshot are included. Public/free/all-regions distribution is selected. Public availability verified October 3, 2026: version 2.0.0 is listed on the Chrome Web Store at https://chromewebstore.google.com/detail/hiilcimbjiioafbbpjngamcnnigonglf. Extension ID: `hiilcimbjiioafbbpjngamcnnigonglf`. Publisher ID: `5684b4d1-782e-472d-93a2-7a35af14aa87`; registered account: `waelfezari@gmail.com`; public contact: `waelfeza@gmail.com`.
+
+Draft: https://chrome.google.com/u/1/webstore/devconsole/5684b4d1-782e-472d-93a2-7a35af14aa87/hiilcimbjiioafbbpjngamcnnigonglf/edit/listing
 
 ## Account setup
 
@@ -12,7 +14,7 @@ Open https://chrome.google.com/webstore/devconsole and complete Google's identit
 - Upload ZIP: `dist/extension/patchgoblin-extension.zip` (manifest version 3, extension version 2.0.1).
 - Store icon: `extension/icons/icon-128.png` (128 × 128 PNG, 96 × 96 artwork with transparent padding).
 - Small promotional tile: `docs/chrome-web-store/promo-440x280.png`.
-- Screenshots: **still required**. Capture the actual installed extension on a public GitHub repository. Provide at least one 1280 × 800 or 640 × 400 full-bleed image. Use a signed-out popup and optionally a real authorized failed-run popup. Do not expose private repository names or credentials. Do not claim simulated status is a real repair or an installed-extension screenshot.
+- Screenshot: `docs/chrome-web-store/popup-preview-1280x800.jpg` (1280 × 800, RGB JPEG). Captured from the packaged popup HTML/CSS/JS in a local browser preview. The active-tab API supplies a public repository context; an HTTPS request to the actual backend without credentials supplies the real signed-out response. The image explicitly labels the preview and supplied active-tab context. No repair, permissions, job or signed-in state is fabricated. It is not an installed-Chrome capture and does not verify native permission/cookie behavior.
 
 Rebuild with `npm run build:extension`. The ZIP has `manifest.json` at its root, includes locally bundled runtime/font assets and PNG icons, and excludes README/publication material.
 
@@ -28,7 +30,7 @@ Rebuild with `npm run build:extension`. The ZIP has `manifest.json` at its root,
 
 **Website:** https://patchgoblin.vercel.app
 
-**Support:** https://patchgoblin.vercel.app/support
+**Support:** https://github.com/wauul/PatchGoblin/issues (Google's validation timed out on the hosted support page; the listing uses the project's public issue tracker).
 
 **Contact:** waelfeza@gmail.com
 
@@ -59,6 +61,8 @@ PatchGoblin is an independent project and is not affiliated with GitHub or Googl
 **activeTab justification:** After the user invokes the popup, read the active tab URL to identify a GitHub repository and optional Actions run ID. This supplies context for status and workbench navigation. The extension does not read page contents or query browsing history in the background.
 
 **Host permission justification — https://patchgoblin.vercel.app/*:** Fetch authenticated JSON status from /api/extension/status for the selected repository and optional run, displaying installation, repository permissions and recent jobs. The browser attaches the existing PatchGoblin session cookie; JavaScript cannot read it.
+
+**Sentry ingest host justification:** A production monitoring build requests only the exact `https://o4512192414810112.ingest.de.sentry.io/*` host to deliver sanitized popup errors. The locally bundled SDK does not instrument GitHub pages or collect their content. No private repository names, account identities, tokens, cookies, source code, logs, prompts or request bodies are sent. Update the store privacy disclosure for anonymous diagnostics before publishing this new package; the currently published extension and this rebuilt package have separate release status.
 
 **Remote code:** No. JavaScript, CSS, translations, fonts and icons are bundled locally. Backend JSON is displayed as data, never executed. Opening the ordinary HTTPS web app in a separate tab does not execute remote code inside the extension.
 
@@ -99,9 +103,6 @@ For questions or help testing authenticated paths: waelfeza@gmail.com. Do not pr
 - https://developer.chrome.com/docs/webstore/images
 - https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
 - https://developer.chrome.com/docs/webstore/program-policies/limited-use
-
-
-**Sentry ingest host justification:** A production monitoring build requests only the exact `https://o4512192414810112.ingest.de.sentry.io/*` host to deliver sanitized popup errors. The locally bundled SDK does not instrument GitHub pages or collect their content. No private repository names, account identities, tokens, cookies, source code, logs, prompts or request bodies are sent. Update the store privacy disclosure for anonymous diagnostics before publishing this new package; the currently published extension and this rebuilt package have separate release status.
 
 
 ## Version 2.0.1 review submission — October 3, 2026
