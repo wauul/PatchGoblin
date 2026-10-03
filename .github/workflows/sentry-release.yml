@@ -32,6 +32,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       - run: npx vercel@60.1.3 build --prod --token="$VERCEL_TOKEN"
+      - run: node scripts/verify-vercel-runtime.mjs
       - run: node scripts/sentry-api-maps.mjs
       - run: node scripts/check-sentry-artifacts.mjs
       # No artifact upload action: source maps/token must not become CI downloads.
