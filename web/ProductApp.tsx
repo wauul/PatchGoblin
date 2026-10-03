@@ -2009,6 +2009,7 @@ function Information({ page, config }: any) {
           </p>
           <h2>{t("Error monitoring")}</h2>
           <p>{t("When configured, Sentry receives sanitized operational errors, timings and measured model token counts from the web app, API, trusted worker and extension popup. Tokens, cookies, account identities, private repository names, source code, patches, CI output, model prompts and responses, and request bodies are excluded. Sentry may receive network metadata when telemetry is delivered. Session Replay is disabled by default; if enabled after privacy verification, it is restricted to public pages with masked text and inputs and blocked code, logs and evidence. Sensitive account and workbench pages are excluded. Production monitoring uses our EU Sentry organization on the Developer plan. Error events are retained for 30 days; sampled tracing data may be retained for up to 13 months under Sentry policy. Operational logs follow Sentry retention policy. Reporting is disabled in local development unless explicitly enabled for verification. Account deletion cannot look up anonymous telemetry by identity.")}</p>
+          <p>{t("Vercel Speed Insights measures web page performance. Before performance events are sent, we remove URL query strings, fragments and credentials and report only fixed application routes. Unknown paths are grouped under /not-found. Repository names, run IDs and OAuth values in URLs are excluded.")}</p>
           <h2>{t("Third parties")}</h2>
           <p>
             {t(

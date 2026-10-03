@@ -76,6 +76,8 @@ The worker accesses selected manifests/workflows, bounded archives, Actions meta
 
 Evidence retention is configurable to 7/30/90 days (30 default). Completed webhook payloads are cleared; delivery metadata expires after seven days; expired sessions/states are removed; retention cron runs daily. Account deletion removes sessions, encrypted grant/account data/evidence and cancels work. Opaque cleanup tombstones can temporarily remain until VM cleanup; a racing worker cannot restore erased evidence. Deletion does not erase GitHub PRs/commits or uninstall the App. Export excludes secrets/session material.
 
+The web app includes Vercel Web Analytics and Speed Insights. Speed Insights measures real-user page performance across the application. Its `beforeSend` filter removes query strings, fragments and URL credentials and reports only known application routes; unknown paths are grouped under `/not-found`. Vercel's build-time observability configuration is forwarded to the React SDK by Vite. Performance data is viewed in the project's Speed Insights dashboard after deployment and visitor traffic.
+
 Live [privacy](https://patchgoblin.vercel.app/privacy), [terms](https://patchgoblin.vercel.app/terms), [support](https://patchgoblin.vercel.app/support). Operator name/legal contact/support URL are configurable. No entity, certification, email or uptime guarantee is invented. A dedicated legal contact is not configured; the page identifies this missing publication detail.
 
 ## Local development
