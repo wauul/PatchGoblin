@@ -1,4 +1,5 @@
 import { t, useLanguage, LanguagePicker } from "./locale";
+import {monitoredApi,captureFrontend} from './telemetry';
 import React, { useEffect, useState } from "react";
 import {
   ArrowUpRight,
@@ -40,7 +41,7 @@ import {
 } from "./ui";
 let csrf = "";
 async function api(path: string, body?: any) {
-  const response = await fetch("/api" + path, {
+  const response = await monitoredApi(path, {
     cache: "no-store",
     credentials: "same-origin",
     method: body === undefined ? "GET" : "POST",
@@ -50,7 +51,7 @@ async function api(path: string, body?: any) {
         : { "Content-Type": "application/json", "X-CSRF-Token": csrf },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const value = await response.json();
+  let value;try{value=await response.json();}catch(error){captureFrontend(error);throw error;}
   if (!response.ok) throw new Error(value.error || t("Request failed"));
   return value;
 }
@@ -1805,7 +1806,7 @@ function Extension() {
       <p>
         {t("The")} <code>{t("activeTab")}</code>{" "}
         {t(
-          "permission reads the URL only when you invoke the popup. One host permission, for PatchGoblin alone, reads basic status using your existing browser session. There are no GitHub host permissions, content scripts, background polling or extension-storage permissions. GitHub navigation is recognized each time you open it.",
+          "permission reads the URL only when you invoke the popup. The PatchGoblin host permission reads basic status using your existing browser session. When monitoring is configured, one exact Sentry ingest host receives sanitized popup errors. There are no GitHub host permissions, content scripts, background polling or extension-storage permissions. GitHub navigation is recognized each time you open it.",
         )}
       </p>
       <p>
@@ -1996,6 +1997,8 @@ function Information({ page, config }: any) {
               "Account deletion immediately removes credentials and sessions, erases your job request/evidence data and cancels active work. Cleanup retains only an opaque job identifier and sandbox/lease metadata until teardown completes. Automations you controlled are disabled. Uninstalling or removing repository access stops automation, cancels work and removes access memberships. GitHub commits and PRs remain on GitHub; provider backups and provider operational logs follow those providers\u2019 policies.",
             )}
           </p>
+          <h2>{t("Error monitoring")}</h2>
+          <p>{t("When configured, Sentry receives sanitized operational errors, timings and measured model token counts from the web app, API, trusted worker and extension popup. Tokens, cookies, account identities, private repository names, source code, patches, CI output, model prompts and responses, and request bodies are excluded. Sentry may receive network metadata when telemetry is delivered. Session Replay is disabled by default; if enabled after privacy verification, it is restricted to public pages with masked text and inputs and blocked code, logs and evidence. Sensitive account and workbench pages are excluded. Production monitoring uses our EU Sentry organization on the Developer plan. Error events are retained for 30 days; sampled tracing data may be retained for up to 13 months under Sentry policy. Operational logs follow Sentry retention policy. Reporting is disabled in local development unless explicitly enabled for verification. Account deletion cannot look up anonymous telemetry by identity.")}</p>
           <h2>{t("Third parties")}</h2>
           <p>
             {t(

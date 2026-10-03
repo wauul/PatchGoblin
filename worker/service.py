@@ -6,6 +6,7 @@ import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from worker import telemetry
 from worker.agent import Agent
 from worker.database import DatabaseStore, claim, connect
 from worker.github import GitHub
@@ -16,10 +17,13 @@ from worker.app_auth import InstallationGitHub
 from worker.pipeline_agent import PipelineAgent
 from worker.webhooks import drain_deliveries
 
+telemetry.init()
+
 DRAIN_LOCK = threading.Lock()
 DELIVERY_LOCK = threading.Lock()
 
 
+@telemetry.instrument('cleanup')
 def cleanup():
     with connect() as db:
         rows = db.execute(
@@ -28,7 +32,8 @@ def cleanup():
     for row in rows:
         try:
             destroy(row["sandbox_id"])
-        except Exception:
+        except Exception as exc:
+            telemetry.capture(exc, "cleanup")
             # Expired/auto-destroyed VMs are harmless. Keep the ID for inspection.
             continue
         with connect() as db:
@@ -39,6 +44,16 @@ def cleanup():
 
 
 def execute(row):
+    request = row.get('request') or {}
+    with telemetry.work_scope('job', row.get('id'), request.get('telemetry'), request.get('mode')):
+        try:
+            _execute(row)
+        except Exception as exc:
+            telemetry.capture(exc, 'job')
+            raise
+
+
+def _execute(row):
     store = DatabaseStore(row)
     request = row["request"]
     github = None
@@ -60,6 +75,7 @@ def execute(row):
             "base_ref",
             "review_pr",
             "retry_submission",
+            "telemetry",
         }:
             raise ValueError("Invalid durable job request")
         if request.get("owner") != row["owner_key"]:
@@ -82,8 +98,10 @@ def execute(row):
                 )
         if result["status"] == "verified" and not store.cancelled(force=True):
             try:
+                telemetry.stage('submit')
                 result.update(submit(github, row["id"], request, result, lambda: store.cancelled(force=True)))
             except Exception as exc:
+                telemetry.capture(exc, "submit")
                 result["pr_error"] = redact(str(exc))[:1000]
             store.save(result)
         if row.get("installation_id") and result.get("sha"):
@@ -108,12 +126,14 @@ def execute(row):
                         },
                     },
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                telemetry.capture(exc, "check_run")
+        telemetry.log('job', status=result['status'], mode=request.get('mode'))
         print(
             json.dumps({"job": row["id"], "status": result["status"], "metrics": result.get("metrics", {})}), flush=True
         )
     except Exception as exc:
+        telemetry.capture(exc, "job")
         if not store.cancelled(force=True):
             state = (
                 agent.state
@@ -126,10 +146,19 @@ def execute(row):
     finally:
         if github:
             github.client.close()
-        store.release()
+        try:
+            store.release()
+        except Exception as exc:
+            telemetry.capture(exc, 'release')
+            raise
 
 
 def drain():
+    with telemetry.work_scope('drain'):
+        _drain()
+
+
+def _drain():
     try:
         cleanup()
         while True:
@@ -149,6 +178,7 @@ def drain():
 
             time.sleep(max(0.2, min(15, (next_work - datetime.now(timezone.utc)).total_seconds())))
     except Exception as exc:
+        telemetry.capture(exc, "drain")
         print(json.dumps({"level": "error", "message": redact(str(exc))[:1000]}), flush=True)
     finally:
         DRAIN_LOCK.release()
@@ -161,10 +191,15 @@ def wake():
         # Reconcile signed events while sandbox work is running, so a newer push
         # or revoked installation can cancel that work before submission.
         def reconcile_pending():
+            with telemetry.work_scope('reconcile'):
+                _reconcile_pending()
+
+        def _reconcile_pending():
             try:
                 while drain_deliveries():
                     pass
             except Exception as exc:
+                telemetry.capture(exc, 'reconcile')
                 print(json.dumps({'level':'error','message':redact(str(exc))[:1000]}), flush=True)
             finally:
                 DELIVERY_LOCK.release()

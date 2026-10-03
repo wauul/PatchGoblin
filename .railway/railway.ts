@@ -14,6 +14,9 @@ export default defineRailway(() => {
       "MODEL_BASE_URL", "MODEL_CONTEXT_TOKENS", "MODEL_NAME", "OWNER_LOGIN", "PORT",
       "RAILWAY_TOKEN", "WORKER_WAKE_TOKEN",
       "GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY_B64", "GITHUB_APP_SLUG",
+      "SENTRY_DSN", "SENTRY_ENVIRONMENT", "SENTRY_RELEASE", "SENTRY_ENABLED",
+      "SENTRY_ERROR_SAMPLE_RATE", "SENTRY_TRACES_SAMPLE_RATE", "SENTRY_LOGS_ENABLED",
+      "SENTRY_LOG_SAMPLE_RATE", "SENTRY_MAX_EVENTS_PER_MINUTE",
     ].map(key => [key, preserve()])),
     deploy: {
       healthcheckPath: "/health", healthcheckTimeout: 120,

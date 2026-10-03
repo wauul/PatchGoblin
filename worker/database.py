@@ -1,4 +1,5 @@
 """Owner-scoped durable job state and exclusive, expiring worker leases in Neon."""
+from worker import telemetry
 import json
 import os
 import time
@@ -12,6 +13,7 @@ def connect():
     return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=15)
 
 
+@telemetry.instrument('database')
 def claim():
     lease=str(uuid.uuid4())
     with connect() as db:
@@ -25,6 +27,7 @@ class DatabaseStore:
         self.last_check=0
         self.is_cancelled=False
 
+    @telemetry.instrument('persistence')
     def save(self,state):
         text=json.dumps(redact_data(state),ensure_ascii=False)
         if len(text.encode())>250000:
@@ -34,6 +37,7 @@ class DatabaseStore:
             if not updated and not self.cancelled(force=True):
                 raise InterruptedError("Worker no longer owns this job lease")
 
+    @telemetry.instrument('persistence')
     def cancelled(self,force=False):
         if force or time.monotonic()-self.last_check>2:
             self.last_check=time.monotonic()
@@ -42,10 +46,12 @@ class DatabaseStore:
             self.is_cancelled=not row or bool(row["cancelled_at"]) or row["lease_token"]!=self.lease or not row["valid"] or not row['repo_available']
         return self.is_cancelled
 
+    @telemetry.instrument('persistence')
     def sandbox(self,sandbox_id):
         with connect() as db:
             db.execute("UPDATE patchgoblin_jobs SET sandbox_id=%s WHERE id=%s AND lease_token=%s",(sandbox_id,self.id,self.lease))
 
+    @telemetry.instrument('persistence')
     def release(self):
         with connect() as db:
             db.execute("UPDATE patchgoblin_jobs SET lease_token=NULL,lease_expires_at=NULL WHERE id=%s AND lease_token=%s",(self.id,self.lease))

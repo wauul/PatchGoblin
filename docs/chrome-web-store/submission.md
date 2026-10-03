@@ -9,7 +9,7 @@ Open https://chrome.google.com/webstore/devconsole and complete Google's identit
 
 ## Files
 
-- Upload ZIP: `dist/extension/patchgoblin-extension.zip` (manifest version 3, extension version 2.0.0).
+- Upload ZIP: `dist/extension/patchgoblin-extension.zip` (manifest version 3, extension version 2.0.1).
 - Store icon: `extension/icons/icon-128.png` (128 × 128 PNG, 96 × 96 artwork with transparent padding).
 - Small promotional tile: `docs/chrome-web-store/promo-440x280.png`.
 - Screenshots: **still required**. Capture the actual installed extension on a public GitHub repository. Provide at least one 1280 × 800 or 640 × 400 full-bleed image. Use a signed-out popup and optionally a real authorized failed-run popup. Do not expose private repository names or credentials. Do not claim simulated status is a real repair or an installed-extension screenshot.
@@ -48,7 +48,7 @@ Job buttons open the web workbench. Review the repository and start the job ther
 
 Repository status and job actions require signing in to PatchGoblin with GitHub and explicitly installing the separate PatchGoblin CI GitHub App on selected repositories. Repair requires an eligible completed failed run and repository write access. Unsupported failures remain visible without an unverified pull request.
 
-The extension uses activeTab only after you open it, and network access only to patchgoblin.vercel.app. It does not read page contents, store GitHub credentials or monitor browsing in the background. Only language and appearance preferences are stored locally. Your browser sends the existing PatchGoblin session cookie with status requests; extension JavaScript cannot read that HTTP-only cookie.
+The extension uses activeTab only after you open it, and network access only to patchgoblin.vercel.app plus the exact configured Sentry ingest host for sanitized popup diagnostics. It does not read page contents, store GitHub credentials or monitor browsing in the background. Only language and appearance preferences are stored locally. Your browser sends the existing PatchGoblin session cookie with status requests; extension JavaScript cannot read that HTTP-only cookie.
 
 PatchGoblin is an independent project and is not affiliated with GitHub or Google.
 
@@ -58,7 +58,7 @@ PatchGoblin is an independent project and is not affiliated with GitHub or Googl
 
 **activeTab justification:** After the user invokes the popup, read the active tab URL to identify a GitHub repository and optional Actions run ID. This supplies context for status and workbench navigation. The extension does not read page contents or query browsing history in the background.
 
-**Host permission justification — https://patchgoblin.vercel.app/*:** Fetch authenticated JSON status from /api/extension/status for the selected repository and optional run, displaying installation, repository permissions and recent jobs. The browser attaches the existing PatchGoblin session cookie; JavaScript cannot read it. No other host access is requested.
+**Host permission justification — https://patchgoblin.vercel.app/*:** Fetch authenticated JSON status from /api/extension/status for the selected repository and optional run, displaying installation, repository permissions and recent jobs. The browser attaches the existing PatchGoblin session cookie; JavaScript cannot read it.
 
 **Remote code:** No. JavaScript, CSS, translations, fonts and icons are bundled locally. Backend JSON is displayed as data, never executed. Opening the ordinary HTTPS web app in a separate tab does not execute remote code inside the extension.
 
@@ -99,3 +99,6 @@ For questions or help testing authenticated paths: waelfeza@gmail.com. Do not pr
 - https://developer.chrome.com/docs/webstore/images
 - https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
 - https://developer.chrome.com/docs/webstore/program-policies/limited-use
+
+
+**Sentry ingest host justification:** A production monitoring build requests only the exact `https://o4512192414810112.ingest.de.sentry.io/*` host to deliver sanitized popup errors. The locally bundled SDK does not instrument GitHub pages or collect their content. No private repository names, account identities, tokens, cookies, source code, logs, prompts or request bodies are sent. Update the store privacy disclosure for anonymous diagnostics before publishing this new package; the currently published extension and this rebuilt package have separate release status.

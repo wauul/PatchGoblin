@@ -1,4 +1,5 @@
 """Bounded model-selected pipeline changes with deterministic coverage and isolated checks."""
+from worker import telemetry
 
 import difflib
 import hashlib
@@ -150,6 +151,7 @@ class PipelineAgent(Agent):
         except Unsupported as exc:
             self.state.update(status="unsupported", diagnosis=redact(str(exc)))
         except Exception as exc:
+            telemetry.capture(exc, 'job')
             self.state.update(status="failed", diagnosis=redact(str(exc))[:1000])
         finally:
             if sandbox:

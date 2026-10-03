@@ -1,4 +1,5 @@
 """Durable signed-delivery processing, reconciled against current GitHub state."""
+from worker import telemetry
 
 import json
 from worker.app_auth import app_request, InstallationGitHub
@@ -75,7 +76,7 @@ def enqueue(repo, mode, key, request, delay=0):
                 repo["controller_id"],
                 repo["id"],
                 key,
-                json.dumps({"repo": repo["full_name"], "mode": mode, "source": "github", "key": key, **request}),
+                json.dumps({"repo": repo["full_name"], "mode": mode, "source": "github", "key": key, **request, "telemetry": telemetry.durable_trace()}),
                 delay,
             ),
         ).fetchone()
@@ -106,6 +107,15 @@ def record_remote_ci(repo, installation_id, run):
 
 
 def process(delivery):
+    with telemetry.work_scope('delivery', delivery.get('id'), (delivery.get('payload') or {}).get('telemetry')):
+        try:
+            _process(delivery)
+        except Exception as exc:
+            telemetry.capture(exc, 'delivery')
+            raise
+
+
+def _process(delivery):
     data = delivery["payload"]
     event = delivery["event"]
     installation_id = delivery["installation_id"]
@@ -269,6 +279,11 @@ def drain_deliveries():
         ).fetchone()
     if not row:
         return False
+    _finish_delivery(row)
+    return True
+
+
+def _finish_delivery(row):
     try:
         process(row)
         with connect() as db:
@@ -277,6 +292,7 @@ def drain_deliveries():
                 (row["id"],),
             )
     except Exception as exc:
+        telemetry.capture(exc, 'delivery')
         busy = "PG_ACTIVE_JOB" in str(exc)
         delay = max(15, getattr(exc,'retry_after',15))
         with connect() as db:

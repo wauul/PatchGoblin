@@ -1,0 +1,38 @@
+name: Sentry private release artifacts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sourcemaps:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT_FRONTEND: patchgoblin-frontend
+      SENTRY_PROJECT_API: patchgoblin-api
+      SENTRY_PROJECT_EXTENSION: patchgoblin-extension
+      SENTRY_RELEASE: patchgoblin@${{ github.sha }}
+      SENTRY_ENVIRONMENT: production
+      SENTRY_REQUIRE_UPLOAD: 'true'
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npx vercel@60.1.3 pull --yes --environment=production --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - run: npx vercel@60.1.3 build --prod --token="$VERCEL_TOKEN"
+      - run: node scripts/sentry-api-maps.mjs
+      - run: node scripts/check-sentry-artifacts.mjs
+      # No artifact upload action: source maps/token must not become CI downloads.
+      # A reviewed deployment uses this exact output via vercel deploy --prebuilt.

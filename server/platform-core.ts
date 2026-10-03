@@ -1,9 +1,10 @@
+import {span,captureFault} from './telemetry.js';
 import {createHash,randomBytes,createCipheriv,createDecipheriv,createSign,createHmac,timingSafeEqual} from 'node:crypto';
 import {neon} from '@neondatabase/serverless';
 
 export type ProductEnv=Record<string,string|undefined>;
 export type Query=(text:string,params?:any[])=>Promise<any[]>;
-export class ProductError extends Error {constructor(public status:number,message:string){super(message)}}
+export class ProductError extends Error {constructor(public status:number,message:string,public expected=false){super(message)}}
 export const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 export const random=()=>randomBytes(32).toString('base64url');
 export const json=(value:any,status=200,headers:Record<string,string>={})=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}});
@@ -20,19 +21,19 @@ export function repositoryName(value:any){if(typeof value!=='string'||!/^[-\w.]+
 
 export class Product {
  sql:Query;
- constructor(public env:ProductEnv,public fetcher:typeof fetch=fetch,query?:Query){this.sql=query||((text,params=[])=>neon(env.DATABASE_URL! ).query(text,params) as Promise<any[]>);}
+ constructor(public env:ProductEnv,public fetcher:typeof fetch=fetch,query?:Query){const execute=query||((text:string,params:any[]=[])=>neon(env.DATABASE_URL! ).query(text,params) as Promise<any[]>);this.sql=(text,params)=>span('database',()=>execute(text,params));}
  async github(path:string,token:string,method='GET',body?:any){
-  const r=await this.fetcher('https://api.github.com'+path,{method,headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'PatchGoblin','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
+  const r=await span('github',()=>this.fetcher('https://api.github.com'+path,{method,headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'PatchGoblin','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)}));
   if(!r.ok){if(r.status===429||(r.status===403&&r.headers.get('x-ratelimit-remaining')==='0'))throw new ProductError(429,'GitHub rate limit reached. Retry after '+(r.headers.get('retry-after')||'60')+' seconds.');throw new ProductError(r.status===401?401:r.status===404?404:502,`GitHub request failed (${r.status}). Reconnect or check installation permissions.`);}
   return r.status===204?null:r.json();
  }
- async oauth(body:Record<string,string>,identity=false){const r=await this.fetcher('https://github.com/login/oauth/access_token',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({client_id:identity?this.env.GITHUB_OAUTH_CLIENT_ID:this.env.GITHUB_CLIENT_ID,client_secret:identity?this.env.GITHUB_OAUTH_CLIENT_SECRET:this.env.GITHUB_CLIENT_SECRET,...body}),signal:AbortSignal.timeout(20000)});const result=await r.json();if(!r.ok||!result.access_token)throw new ProductError(401,'GitHub authorization expired or was declined. Sign in again.');return result;}
+ async oauth(body:Record<string,string>,identity=false){const r=await span('oauth',()=>this.fetcher('https://github.com/login/oauth/access_token',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({client_id:identity?this.env.GITHUB_OAUTH_CLIENT_ID:this.env.GITHUB_CLIENT_ID,client_secret:identity?this.env.GITHUB_OAUTH_CLIENT_SECRET:this.env.GITHUB_CLIENT_SECRET,...body}),signal:AbortSignal.timeout(20000)}));const result=await r.json();if(!r.ok||!result.access_token)throw new ProductError(r.status>=500?502:401,'GitHub authorization expired or was declined. Sign in again.');return result;}
  async session(req:Request){const value=cookies(req)['__Host-pg-session'];if(!value)return null;const rows=await this.sql('SELECT a.*,s.csrf,s.token_hash FROM pg_sessions s JOIN pg_accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now()',[hash(value)]);return rows[0]||null;}
  async userToken(account:any){if(!account.credentials)throw new ProductError(403,'Authorize selected repository access in onboarding.');let auth=decrypt(account.credentials,this.env);if(account.token_expires_at&&new Date(account.token_expires_at).getTime()<Date.now()+60000){if(!auth.refresh_token)throw new ProductError(401,'Authorize repository access again in onboarding.');
   const lease=await this.sql("UPDATE pg_accounts SET refresh_lease_until=now()+interval '30 seconds' WHERE id=$1 AND credentials=$2 AND (refresh_lease_until IS NULL OR refresh_lease_until<now()) RETURNING id",[account.id,account.credentials]);
   if(lease.length){try{const result=await this.oauth({grant_type:'refresh_token',refresh_token:auth.refresh_token});await this.sql('UPDATE pg_accounts SET credentials=$2,token_expires_at=$3,refresh_expires_at=$4,refresh_lease_until=NULL,updated_at=now() WHERE id=$1 AND credentials=$5',[account.id,encrypt(result,this.env),new Date(Date.now()+(result.expires_in||28800)*1000).toISOString(),result.refresh_token_expires_in?new Date(Date.now()+result.refresh_token_expires_in*1000).toISOString():null,account.credentials]);}catch(error){await this.sql('UPDATE pg_accounts SET refresh_lease_until=NULL WHERE id=$1',[account.id]);throw error;}}
   else for(let attempt=0;attempt<6;attempt++){const current=(await this.sql('SELECT credentials,token_expires_at FROM pg_accounts WHERE id=$1',[account.id]))[0];if(!current)throw new ProductError(401,'Account no longer exists.');if(current.credentials!==account.credentials){auth=decrypt(current.credentials,this.env);return auth.access_token;}await new Promise(resolve=>setTimeout(resolve,500));}
-  const current=(await this.sql('SELECT credentials,token_expires_at FROM pg_accounts WHERE id=$1',[account.id]))[0];if(!current||new Date(current.token_expires_at).getTime()<Date.now()+60000)throw new ProductError(503,'GitHub access is being renewed. Retry in a moment.');auth=decrypt(current.credentials,this.env);
+  const current=(await this.sql('SELECT credentials,token_expires_at FROM pg_accounts WHERE id=$1',[account.id]))[0];if(!current||new Date(current.token_expires_at).getTime()<Date.now()+60000)throw new ProductError(503,'GitHub access is being renewed. Retry in a moment.',true);auth=decrypt(current.credentials,this.env);
  }return auth.access_token;}
  async installationToken(id:number,repoId?:number){const value=await this.github(`/app/installations/${id}/access_tokens`,appJwt(this.env),'POST',repoId?{repository_ids:[repoId]}:{});return value.token;}
  async sync(account:any){const token=await this.userToken(account);const installations=[];for(let page=1;page<=10;page++){const data=await this.github(`/user/installations?per_page=100&page=${page}`,token);installations.push(...data.installations.filter((x:any)=>String(x.app_id)===this.env.GITHUB_APP_ID));if(data.installations.length<100)break;}
@@ -47,5 +48,5 @@ export class Product {
   // A user token cannot access a repository outside the App installation intersection.
   const current=await this.github(`/repos/${name}/installation`,appJwt(this.env));if(current.id!==Number(row.installation_id)||current.suspended_at)throw new ProductError(403,'Installation access has changed. Refresh your repositories.');return {row,token:await this.installationToken(Number(row.installation_id),Number(row.id)),actual};
  }
- async wake(){if(!this.env.WORKER_URL||!this.env.WORKER_WAKE_TOKEN)return;for(let i=0;i<2;i++)try{const r=await this.fetcher(this.env.WORKER_URL+'/wake',{method:'POST',headers:{Authorization:'Bearer '+this.env.WORKER_WAKE_TOKEN},signal:AbortSignal.timeout(12000)});if(r.ok)return;}catch{}}
+ async wake(){if(!this.env.WORKER_URL||!this.env.WORKER_WAKE_TOKEN)return;for(let i=0;i<2;i++)try{const r=await span('wake',()=>this.fetcher(this.env.WORKER_URL+'/wake',{method:'POST',headers:{Authorization:'Bearer '+this.env.WORKER_WAKE_TOKEN},signal:AbortSignal.timeout(12000)}));if(r.ok)return;if(i===1)captureFault(new Error('Worker wake failed'),'wake');}catch(error){if(i===1)captureFault(error,'wake');}}
 }

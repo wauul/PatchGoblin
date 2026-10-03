@@ -1,4 +1,5 @@
 import { t, getLanguage, setLanguage } from "./locale.js";
+import {capturePopup} from './telemetry';
 import { BACKEND, recognize, actionUrl } from "./context.js";
 const browserApi = globalThis.chrome || globalThis.browser;
 const status = document.getElementById("status");
@@ -147,7 +148,11 @@ async function initialize() {
       );
       return;
     }
-    if (!response.ok) throw Error("Backend status is unavailable");
+    if (!response.ok) {
+      const error=Error("Backend status is unavailable");
+      error.expected=response.status<500||!!response.headers.get('X-Sentry-Event-ID');
+      throw error;
+    }
     const data = await response.json();
     if (!data.installed) {
       status.textContent = t(
@@ -176,13 +181,15 @@ async function initialize() {
       });
       document.getElementById("jobs").append(a);
     }
-  } catch {
+  } catch (error) {
+    capturePopup(error);
     status.textContent = t(
       "PatchGoblin is unavailable or your browser blocks session cookies. Open the web app to reconnect; no job was started.",
     );
   }
 }
-initialize().catch(() => {
+initialize().catch((error) => {
+  capturePopup(error);
   status.textContent = t(
     "This browser could not read the active tab. Open PatchGoblin directly.",
   );

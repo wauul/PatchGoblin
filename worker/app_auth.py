@@ -1,4 +1,5 @@
 """Short-lived, single-repository installation credentials; never sent to sandboxes."""
+from worker import telemetry
 
 import base64
 import os
@@ -18,6 +19,7 @@ def app_jwt():
     )
 
 
+@telemetry.instrument('github')
 def app_request(method, path, body=None):
     with httpx.Client(timeout=25) as client:
         response = client.request(
@@ -47,6 +49,7 @@ class InstallationGitHub(GitHub):
         super().__init__(token="pending-installation-token")
         self.refresh()
 
+    @telemetry.instrument('github')
     def refresh(self):
         current = app_request("GET", f"/repos/{self.repo}/installation")
         if not current or current["id"] != self.installation_id or current.get("suspended_at"):
@@ -59,6 +62,7 @@ class InstallationGitHub(GitHub):
         self.client.headers["Authorization"] = "Bearer " + value["token"]
         self.expires = time.monotonic() + 3300
 
+    @telemetry.instrument('github')
     def request(self, method, path, **kwargs):
         if time.monotonic() > self.expires:
             self.refresh()
@@ -70,6 +74,7 @@ class InstallationGitHub(GitHub):
             raise ValueError("Installation request escaped its repository scope")
         return super().request(method, path, **kwargs)
 
+    @telemetry.instrument('github')
     def download(self, repo, sha, root):
         if repo != self.repo:
             raise ValueError("Archive request escaped its repository scope")

@@ -1,4 +1,5 @@
 """Railway SDK bridge; it executes only trusted tool code outside Docker."""
+from worker import telemetry
 
 import json
 import io
@@ -70,6 +71,7 @@ class RailwaySandbox:
             return result
         raise TimeoutError("Railway sandbox deadline exceeded")
 
+    @telemetry.instrument('provision')
     def start(self):
         bridge = Path(__file__).resolve().parent.parent / "scripts/railway-sandbox-bridge.mjs"
         self.process = subprocess.Popen(
@@ -142,7 +144,8 @@ class RailwaySandbox:
                     self.on_created(None)
                 else:
                     self.request({"op": "close"}, cleanup=True)
-            except Exception:
+            except Exception as exc:
+                telemetry.capture(exc, 'cleanup')
                 # The database retains the VM ID for startup cleanup. The VM also
                 # has a three-minute idle timeout if the control plane is unavailable.
                 pass
@@ -158,6 +161,7 @@ class RailwaySandbox:
                     self.process.wait(timeout=5)
 
 
+@telemetry.instrument('destroy')
 def destroy(sandbox_id):
     bridge = Path(__file__).resolve().parent.parent / "scripts/railway-sandbox-bridge.mjs"
     result = subprocess.run(

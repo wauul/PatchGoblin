@@ -1,8 +1,19 @@
 import {Product,ProductError,json,redirect,cookie,cookies,hash,random,encrypt,localReturn,repositoryName,validSignature,type ProductEnv,type Query} from './platform-core.js';
+import {requestScope,captureFault,durableTrace,span,operationalLog,retentionCheckIn,responseStatus} from './telemetry.js';
+import {route} from '../telemetry/privacy.js';
 const terminal=new Set(['submitted','verified','unsupported','failed','cancelled']);
 const limits={concurrency:1,steps:6,attempts:2,runtime_seconds:600,model_tokens:12000,account_hourly_jobs:8,repository_daily_jobs:3,service_daily_jobs:30};
-const jobView=(r:any)=>({...r.state,...r.request,id:Number(r.id),status:r.status,created_at:r.created_at,updated_at:r.updated_at});
+const jobView=(r:any)=>{const {telemetry:_trace,...request}=r.request||{};return {...r.state,...request,id:Number(r.id),status:r.status,created_at:r.created_at,updated_at:r.updated_at};};
 export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fetch=fetch,query?:Query):Promise<Response>{
+ return requestScope(req,async requestId=>{
+  const response=await handleProductRequest(req,env,fetcher,query);
+  response.headers.set('X-Request-ID',requestId);
+  responseStatus(response.status);
+  operationalLog('request',{route:route(req.url),status:response.status>=500?'error':'ok','http.status_code':response.status});
+  return response;
+ });
+}
+async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fetch,query?:Query):Promise<Response>{
  const url=new URL(req.url),path=url.pathname,product=new Product(env,fetcher,query),sql=product.sql;
  const origin=env.APP_URL||'https://patchgoblin.vercel.app';
  const readBody=async()=>{if(req.headers.get('origin')!==origin||req.headers.get('sec-fetch-site')==='cross-site')throw new ProductError(403,'Cross-origin requests are forbidden.');const raw=await req.text();if(raw.length>10000)throw new ProductError(413,'Request is too large.');try{return JSON.parse(raw)}catch{throw new ProductError(400,'Request must contain JSON.');}};
@@ -15,19 +26,22 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
    const id=req.headers.get('x-github-delivery')||'',event=req.headers.get('x-github-event')||'';
    if(!/^[a-zA-Z0-9-]{16,100}$/.test(id))throw new ProductError(400,'Missing delivery identity.');
    if(!['installation','installation_repositories','workflow_run','push','pull_request','check_run','github_app_authorization','ping'].includes(event))return json({accepted:true,ignored:true},202);
-   const data=JSON.parse(raw);
+   let data;try{data=JSON.parse(raw);}catch{throw new ProductError(400,'Webhook must contain JSON.');}
    // Retain only automation metadata; never persist full pushed source or CI logs here.
    const payload={action:data.action,installation:data.installation&&{id:data.installation.id,account:data.installation.account},repository:data.repository&&{id:data.repository.id,full_name:data.repository.full_name,default_branch:data.repository.default_branch},sender:data.sender&&{id:data.sender.id,login:data.sender.login},ref:data.ref,before:data.before,after:data.after,deleted:data.deleted,
     workflow_run:data.workflow_run&&{id:data.workflow_run.id,conclusion:data.workflow_run.conclusion,status:data.workflow_run.status,head_sha:data.workflow_run.head_sha,head_branch:data.workflow_run.head_branch,event:data.workflow_run.event},
     pull_request:data.pull_request&&{number:data.pull_request.number,head:{sha:data.pull_request.head.sha,ref:data.pull_request.head.ref,repo:{full_name:data.pull_request.head.repo?.full_name}},base:{ref:data.pull_request.base.ref},user:{login:data.pull_request.user.login}},
     check_run:data.check_run&&{id:data.check_run.id,head_sha:data.check_run.head_sha,external_id:data.check_run.external_id,app:{id:data.check_run.app?.id}},requested_action:data.requested_action};
-   const inserted=await sql('INSERT INTO pg_deliveries(id,event,installation_id,repository_id,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id',[id,event,data.installation?.id||null,data.repository?.id||null,JSON.stringify(payload)]);
+   const inserted=await span('webhook',()=>sql('INSERT INTO pg_deliveries(id,event,installation_id,repository_id,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id',[id,event,data.installation?.id||null,data.repository?.id||null,JSON.stringify({...payload,telemetry:durableTrace()})]));
    // Repeated delivery also wakes pending durable work after an interrupted cold start.
-   try{await fetcher(env.WORKER_URL+'/wake',{method:'POST',headers:{Authorization:'Bearer '+env.WORKER_WAKE_TOKEN},signal:AbortSignal.timeout(2000)});}catch{}
+   try{const response=await span('wake',()=>fetcher(env.WORKER_URL+'/wake',{method:'POST',headers:{Authorization:'Bearer '+env.WORKER_WAKE_TOKEN},signal:AbortSignal.timeout(2000)}));if(!response.ok)captureFault(new Error('Worker wake failed'),'wake');}catch(error){captureFault(error,'wake');}
    return json({accepted:true,duplicate:inserted.length===0},202);
   }
   if(path==='/api/retention'){
-   if(!env.CRON_SECRET||req.headers.get('authorization')!=='Bearer '+env.CRON_SECRET)throw new ProductError(401,'Unauthorized');await sql('SELECT pg_retention()');await product.wake();return json({ok:true});
+   if(!env.CRON_SECRET||req.headers.get('authorization')!=='Bearer '+env.CRON_SECRET)throw new ProductError(401,'Unauthorized');
+   const checkIn=retentionCheckIn('in_progress');
+   try{await span('retention',()=>sql('SELECT pg_retention()'));await product.wake();if(checkIn)retentionCheckIn('ok',checkIn);return json({ok:true});}
+   catch(error){if(checkIn)retentionCheckIn('error',checkIn);throw error;}
   }
   if(path==='/api/auth/login'&&req.method==='GET'){
    if(!env.GITHUB_OAUTH_CLIENT_ID)throw new ProductError(503,'GitHub login is not configured.');
@@ -123,7 +137,7 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
    let ref=body.ref||row.default_branch,sha;
    if(body.mode==='repair'){if(!Number.isSafeInteger(body.run_id)||body.run_id<1)throw new ProductError(400,'Choose a failed workflow run.');const run=await product.github(`/repos/${repo}/actions/runs/${body.run_id}`,token);if(run.conclusion!=='failure'||run.status!=='completed')throw new ProductError(400,'Choose a completed failed run.');if(run.event==='pull_request'&&run.head_repository?.full_name!==repo)throw new ProductError(422,'Fork failure repair needs a maintainer branch; maintenance can review the PR separately.');ref=run.head_branch;sha=run.head_sha;}
    if(typeof ref!=='string'||ref.length>200||ref.startsWith('codex/patchgoblin-')||/[\s~^:?*\[\\]/.test(ref))throw new ProductError(400,'Choose a valid contributor or base branch.');
-   const request={repo,mode:body.mode,run_id:body.mode==='repair'?body.run_id:null,ref,key:body.key,sha,source:'web',owner:'github:'+account.id};
+   const request={repo,mode:body.mode,run_id:body.mode==='repair'?body.run_id:null,ref,key:body.key,sha,source:'web',owner:'github:'+account.id,telemetry:durableTrace()};
    const rowJob=(await sql('SELECT * FROM pg_enqueue($1,$2,$3,$4::jsonb)',[account.id,row.id,body.key,JSON.stringify(request)]))[0];await product.wake();return json(jobView(rowJob),202);
   }
   const match=path.match(/^\/api\/jobs\/(\d+)(?:\/(cancel|sync|submit))?$/);
@@ -139,5 +153,5 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
    return json(jobView(row));
   }
   throw new ProductError(404,'Endpoint not found.');
- }catch(error){const message=(error as Error).message;if(message.includes('PG_RATE_LIMIT'))return json({error:'Usage limit reached. Check repository settings and try again tomorrow.'},429);if(message.includes('PG_ACTIVE_JOB'))return json({error:'You already have an active job. Wait for it or cancel it first.'},409);if(message.includes('PG_REPO_DISABLED'))return json({error:'Repository automation is unavailable or paused.'},409);if(error instanceof ProductError)return json({error:error.message},error.status);console.error(JSON.stringify({level:'error',route:path,type:(error as Error).name}));return json({error:'The request could not be completed. Retry or contact support with the page URL.'},500);}
+ }catch(error){const message=(error as Error).message;if(message.split('\n')[0]==='PG_RATE_LIMIT')return json({error:'Usage limit reached. Check repository settings and try again tomorrow.'},429);if(message.split('\n')[0]==='PG_ACTIVE_JOB')return json({error:'You already have an active job. Wait for it or cancel it first.'},409);if(message.split('\n')[0]==='PG_REPO_DISABLED')return json({error:'Repository automation is unavailable or paused.'},409);if(error instanceof ProductError&&error.status<500)return json({error:error.message},error.status);const eventId=captureFault(error,'request');if(error instanceof ProductError)return json({error:error.message,...(eventId?{event_id:eventId}:{})},error.status,eventId?{'X-Sentry-Event-ID':eventId}:{});console.error(JSON.stringify({level:'error',route:route(req.url),type:(error as Error).name}));return json({error:'The request could not be completed. Retry or contact support with the request ID.',...(eventId?{event_id:eventId}:{})},500,eventId?{'X-Sentry-Event-ID':eventId}:{});}
 }

@@ -1,3 +1,4 @@
+from worker import telemetry
 import difflib
 import hashlib
 import os
@@ -25,6 +26,7 @@ class Agent:
             raise InterruptedError("Job cancelled")
         if time.monotonic() > self.deadline:
             raise TimeoutError("Job runtime budget exhausted")
+        telemetry.stage(stage)
         self.state["status"] = stage
         self.state["events"].append({"stage":stage,"message":redact(message),"at":time.time()})
         self.state["metrics"]["duration_seconds"] = round(time.monotonic() - self.start, 2)
@@ -189,6 +191,7 @@ class Agent:
         except Unsupported as exc:
             self.state.update({"status":"unsupported","diagnosis":str(exc)})
         except Exception as exc:
+            telemetry.capture(exc, 'job')
             self.state.update({"status":"failed","diagnosis":redact(str(exc))[:1000]})
         finally:
             if sandbox:

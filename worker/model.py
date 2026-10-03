@@ -1,3 +1,4 @@
+from worker import telemetry
 import json
 import os
 import time
@@ -135,7 +136,10 @@ class Model:
             payload["max_tokens"] = min(2000 if self.groq else 900, available)
             self.calls += 1
             try:
-                response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
+                inference_start = time.monotonic()
+                with telemetry.span('inference') as inference_span:
+                    response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
+                    telemetry.measured(inference_span, model=self.name, duration_ms=(time.monotonic() - inference_start) * 1000, **{'http.status_code': response.status_code})
             except httpx.RequestError as exc:
                 self.usage_available = False
                 self.tokens += budget  # A timed-out inference may still have generated tokens.
@@ -154,6 +158,9 @@ class Model:
         else:
             self.usage_available = False
             self.tokens += budget  # Conservatively stop rather than spend an unmeasured budget.
+        telemetry.log('inference', model=self.name, duration_ms=(time.monotonic() - inference_start) * 1000,
+                      status='ok', **({k: usage[k] for k in ('prompt_tokens', 'completion_tokens', 'total_tokens')
+                                      if k in usage} if usage else {}))
         content = result["choices"][0]["message"]["content"]
         decision=json.loads(content)
         if candidate_id:
