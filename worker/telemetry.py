@@ -118,8 +118,13 @@ def sanitize_event(event, hint=None):
                      'value': 'PatchGoblin operation failed'}
             frames = []
             for frame in value.get('stacktrace', {}).get('frames', [])[-60:]:
-                name = frame.get('filename', '').replace('\\', '/')
-                match = re.search(r'(?:^|/)(worker/[a-z_]+\.py)$', name)
+                # Python may report a basename while abs_path holds the package path.
+                # Use the latter only to derive an allowlisted package-relative name.
+                match = None
+                for location in (frame.get('filename', ''), frame.get('abs_path', '')):
+                    match = re.search(r'(?:^|/)(worker/[a-z_]+\.py)$', location.replace('\\', '/'))
+                    if match:
+                        break
                 frames.append({'filename': match[1], 'lineno': frame.get('lineno'), 'in_app': True}
                               if match else {'filename': '[external]', 'in_app': False})
             clean['stacktrace'] = {'frames': frames}

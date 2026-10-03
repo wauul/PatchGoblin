@@ -33,12 +33,28 @@ def test_errors_strip_provider_text_locals_source_and_secrets():
     event = {'message': SECRET, 'user': {'id': SECRET}, 'request': {'data': SECRET}, 'extra': {'source': SECRET},
              'tags': {'service': 'worker', 'repo': SECRET}, 'contexts': {'operation': {'job_id': 'a' * 32, 'repo': SECRET}},
              'exception': {'values': [{'type': 'RuntimeError', 'value': SECRET, 'stacktrace': {'frames': [
-                 {'filename': '/app/worker/model.py', 'lineno': 5, 'vars': {'key': SECRET}, 'context_line': SECRET},
+                 {'filename': 'model.py', 'abs_path': '/app/worker/model.py', 'lineno': 5, 'vars': {'key': SECRET}, 'context_line': SECRET},
                  {'filename': SECRET, 'vars': {'code': SECRET}}]}}]}}
     clean = telemetry.sanitize_event(event)
     assert SECRET not in json.dumps(clean)
     assert clean['exception']['values'][0]['stacktrace']['frames'][0]['filename'] == 'worker/model.py'
     assert clean['contexts']['operation']['job_id'] == 'a' * 32
+
+
+def test_real_sdk_preserves_owned_python_stack_locations():
+    transport = MemoryTransport()
+    with sentry_sdk.new_scope():
+        telemetry.init({'SENTRY_DSN': DSN, 'SENTRY_VERIFY': 'true', 'SENTRY_ENVIRONMENT': 'verification'}, transport=transport)
+        try:
+            telemetry.metadata(1)
+        except AttributeError as error:
+            telemetry.capture(error, 'verification')
+        telemetry.flush()
+    events = [value for kind, value in transport.items if kind == 'event']
+    assert len(events) == 1
+    frames = events[0]['exception']['values'][0]['stacktrace']['frames']
+    assert any(frame['filename'] == 'worker/telemetry.py' and frame['lineno'] > 0 for frame in frames)
+    assert all('abs_path' not in frame and 'vars' not in frame for frame in frames)
 
 
 def test_trace_metadata_is_bounded_and_expected_filter_is_narrow():
