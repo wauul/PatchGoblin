@@ -89,7 +89,8 @@ Use `patchgoblin@<40-character Git SHA>` consistently. The extension adds
 Vercel/Railway Git SHA variables are supported for Git-driven builds.
 
 The build credential has the limited `org:ci` scope. It is stored in ignored
-`.local/sentry.env`, or in CI secret storage. Runtime Vercel/Railway variables must
+`.local/sentry.env` and the authorized GitHub `production` environment secret.
+Runtime Vercel/Railway variables must
 never include `SENTRY_AUTH_TOKEN`. The ignored local file also contains project
 slugs and public DSNs. `scripts/sentry-local.mjs` loads it only for Node build
 commands and normalizes Windows PATH casing for Vercel's builder.
@@ -110,11 +111,18 @@ Local builds work without credentials and production builds warn explicitly.
 Release CI sets `SENTRY_REQUIRE_UPLOAD=true`, failing incomplete uploads instead
 of silently shipping unreadable stacks. `.github/workflows/sentry-release.yml`
 uses production environment secrets and does not publish maps as CI downloads.
-Before manually dispatching that workflow, configure GitHub's `production`
-environment variable `SENTRY_ORG=patchgoblin` and secrets `SENTRY_AUTH_TOKEN`
-(limited `org:ci`), `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID`.
-Their GitHub presence has not been verified; the approved Sentry token was saved
-locally only. Vercel supplies public frontend configuration during `pull`.
+GitHub's `production` environment is configured and verified: variables
+`SENTRY_ORG=patchgoblin`, `VITE_SENTRY_DSN`, `SENTRY_EXTENSION_DSN`; secrets
+`SENTRY_AUTH_TOKEN` (limited `org:ci`), `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and
+`VERCEL_PROJECT_ID`. Access is restricted to branch `main`. The Vercel CI token
+is scoped only to PatchGoblin and expires **2027-01-01**; rotate that environment
+secret before expiry. The local OAuth CLI login is not used as a CI credential.
+
+`scripts/prepare-sentry-ci-build.mjs` retrieves only this project's build settings
+through the official project API. Vercel CLI 60.1.3 `pull` additionally requests
+team settings and fails with a project-scoped token. The build preparation keeps
+the narrow scope and supplies public DSNs from CI variables; it never retrieves
+runtime secrets. The native build still runs through Vercel CLI.
 Record Sentry deploy tracking only after a deployment succeeds; uploading maps
 alone is not a deployment. Extension packaging is separate from store publication.
 
@@ -193,7 +201,8 @@ diagnostics.
 
 Final deployed release: `patchgoblin@578d2d0d233e7198e5b4f06b777d395664187668`.
 The extension adds `+extension.2.0.1`. The build token has only `org:ci` and
-remains in ignored `.local/sentry.env`; it is absent from runtime variables and
+is saved in ignored `.local/sentry.env` and GitHub's authorized production CI
+secret; it is absent from runtime variables and
 public artifacts. Organization controls require scrubbing, remove user data,
 prevent IP storage, disable JavaScript source fetching, and restrict debug-file
 access to admins. Numeric token-count fields are explicitly safe; no prompt or
@@ -249,7 +258,12 @@ header. `sentry-cross-service-verification.json` preserves the deployed three-
 component trace, and `sentry-production-browser-verification.json` records the
 final shipped web/extension release. Temporary branches are also absent from the
 final compiled API and worker source.
-**2.0.1 is packaged and downloadable; it was not submitted/published to stores.**
+**2.0.1 is packaged, downloadable, and submitted to Chrome Web Store review.**
+Google confirmed `En attente d'examen` on 2026-10-03, with automatic public
+publication after approval selected. Public store version 2.0.0 remains available
+while Google reviews 2.0.1. The submitted ZIP retains release `578d2d0` and matches
+the production download. Store host/data disclosures include sanitized Sentry
+diagnostics; no additional executable code or browser-page access was added.
 
 Passed: `npm test` (39), both npm builds, `uv run pytest -q` (79), Ruff,
 compiled native-ESM Vercel bootstrap, public-artifact scans, English/French
@@ -262,10 +276,16 @@ input, code, logs, evidence, URL and cookie canaries, plus excluded account and
 query-string routes. Production Replay remains off; turning it on is an explicit
 configuration choice, not required for error/tracing coverage.
 
-Remaining gates: automatic retention execution is pending its next
-scheduled run. The manual GitHub release workflow still needs its documented
-production environment secrets/variables before use; the approved build token was
-saved locally only. Local private uploads and production deployments are verified.
+The [manual private release CI run](https://github.com/wauul/PatchGoblin/actions/runs/37137482663)
+passed on `708f8016fa34a4b1314fe054905be676029fa338`: JavaScript tests, the real
+Vercel build, private frontend/extension/API map uploads, native runtime validation
+and public artifact checks. GitHub lists zero downloadable artifacts. The regular
+[repository CI run](https://github.com/wauul/PatchGoblin/actions/runs/37137482750)
+also passed. These build-only runs did not replace production release `578d2d0`.
+
+Remaining external gates: automatic retention execution is pending its next
+scheduled run, and Google must approve the submitted 2.0.1 update. CI credentials
+and the manual release workflow are configured and verified.
 
 References: [Sentry shared environments](https://docs.sentry.io/platforms/javascript/best-practices/shared-environments/),
 [Vite maps](https://docs.sentry.io/platforms/javascript/guides/react/sourcemaps/uploading/vite/),

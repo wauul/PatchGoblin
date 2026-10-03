@@ -21,3 +21,13 @@ To publish from an enrolled account, submit the built zip, describe activeTab, t
 Verification: the user confirmed this unpacked package loaded in Chrome. The available controlled browser cannot load extensions. `scripts/extension-browser-harness.mjs` serves the real popup with explicitly simulated `chrome.tabs` functions and real production status/session requests. Repository recognition, Open/Repair destinations, unavailable/unauthorized status and disabled inappropriate actions were checked in that harness; URL parsing/action construction also have unit coverage. Native Chrome/Edge permission and cookie behavior remains unverified by automation. Chrome documents credentialed extension requests with host permissions as same-site, subject to cookie settings ([official cookie behavior](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies)). The temporary harness is removed from the final public deployment.
 
 Sentry verification (October 3, 2026): `scripts/verify-sentry-browser.mjs` loads the actual packaged ZIP in isolated native Chrome for Testing, verifies the popup CSP and controlled handled/runtime errors, checks outgoing privacy canaries, and closes the popup. Its active-tab URL and backend response are controlled fixtures; real account cookies/jobs are not part of that test. See [monitoring documentation](../docs/sentry.md).
+
+
+### Version 2.0.1 — October 3, 2026
+
+The production-download ZIP was submitted to the existing Chrome Web Store item
+`hiilcimbjiioafbbpjngamcnnigonglf`. Google confirmed **Pending review** with
+automatic public publication after approval enabled. Version **2.0.0** remains
+public while the update is reviewed. The saved listing and privacy disclosures
+now cover the exact Sentry ingest host and sanitized popup diagnostics.
+See the [2.0.1 submission receipt](../docs/chrome-web-store/2.0.1-submission-verification.json).

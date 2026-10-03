@@ -1,0 +1,21 @@
+{
+  "verified_on": "2026-10-03",
+  "method": "authenticated Chrome Web Store publisher UI",
+  "extension_id": "hiilcimbjiioafbbpjngamcnnigonglf",
+  "version": "2.0.1",
+  "packaged_release": "patchgoblin@578d2d0d233e7198e5b4f06b777d395664187668+extension.2.0.1",
+  "zip_sha256": "04943a7811daa929f93e8e7289c157a056d1026bdf1fed9426532dbb07ebb89c",
+  "package_upload_verified": true,
+  "submission_confirmation": "Votre extension a été envoyée pour examen",
+  "status": "En attente d'examen",
+  "automatic_publication_after_approval": true,
+  "current_public_version": "2.0.0",
+  "listing_updated_for_sentry": true,
+  "host_permission_justification": "PatchGoblin status API and exact o4512192414810112.ingest.de.sentry.io host for sanitized popup diagnostics",
+  "data_categories": ["personally identifiable information", "authentication information", "web history", "user activity", "website content"],
+  "remote_executable_code": false,
+  "privacy_policy": "https://patchgoblin.vercel.app/privacy",
+  "production_privacy_policy_visibly_verified": true,
+  "public_store_url": "https://chromewebstore.google.com/detail/hiilcimbjiioafbbpjngamcnnigonglf",
+  "remaining_gate": "Google review and approval"
+}

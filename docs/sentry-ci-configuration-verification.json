@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-03T16:36:36.65Z",
+  "repository": "wauul/PatchGoblin",
+  "environment": "production",
+  "allowed_branch": "main",
+  "secrets": [
+    "SENTRY_AUTH_TOKEN",
+    "VERCEL_ORG_ID",
+    "VERCEL_PROJECT_ID",
+    "VERCEL_TOKEN"
+  ],
+  "variables": [
+    "SENTRY_ORG",
+    "VITE_SENTRY_DSN",
+    "SENTRY_EXTENSION_DSN"
+  ],
+  "vercel_token_project": "prj_E6tuq8HvTu1AXnDn3zTagUg9xywq",
+  "vercel_project_access_status": 200,
+  "sentry_org": "patchgoblin",
+  "vercel_token_expires_on": "2027-01-01",
+  "workflow_run": {
+    "conclusion": "success",
+    "headSha": "708f8016fa34a4b1314fe054905be676029fa338",
+    "status": "completed",
+    "url": "https://github.com/wauul/PatchGoblin/actions/runs/37137482663"
+  },
+  "downloadable_artifacts": 0,
+  "regular_ci_url": "https://github.com/wauul/PatchGoblin/actions/runs/37137482750",
+  "regular_ci_conclusion": "success"
+}

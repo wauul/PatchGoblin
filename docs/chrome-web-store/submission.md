@@ -102,3 +102,33 @@ For questions or help testing authenticated paths: waelfeza@gmail.com. Do not pr
 
 
 **Sentry ingest host justification:** A production monitoring build requests only the exact `https://o4512192414810112.ingest.de.sentry.io/*` host to deliver sanitized popup errors. The locally bundled SDK does not instrument GitHub pages or collect their content. No private repository names, account identities, tokens, cookies, source code, logs, prompts or request bodies are sent. Update the store privacy disclosure for anonymous diagnostics before publishing this new package; the currently published extension and this rebuilt package have separate release status.
+
+
+## Version 2.0.1 review submission — October 3, 2026
+
+Uploaded the exact production-download ZIP and verified draft version **2.0.1**.
+Google confirmed “Votre extension a été envoyée pour examen” and the saved status
+**En attente d'examen**. Automatic public publication after approval is enabled.
+Version **2.0.0** remains the public store release until Google approves 2.0.1.
+
+Package SHA256: `04943a7811daa929f93e8e7289c157a056d1026bdf1fed9426532dbb07ebb89c`.
+Packaged monitoring release: `patchgoblin@578d2d0d233e7198e5b4f06b777d395664187668+extension.2.0.1`.
+Native MV3 and privacy verification are recorded in [Sentry operations](../sentry.md).
+
+The saved listing and host-permission explanation disclose the PatchGoblin status
+API and exact `https://o4512192414810112.ingest.de.sentry.io/*` ingest host.
+Sentry receives fixed errors, application locations, service/environment/release,
+operation/status and opaque support IDs. Private repository content, account
+identities, credentials, cookies and request bodies are excluded from Sentry.
+The bundled SDK is isolated to the popup and never instruments GitHub pages.
+
+Saved data categories: personally identifiable information, authentication
+information, web history, user activity (sanitized operational diagnostics), and
+website content. The first, second, third and fifth include linked-service data;
+the extension itself does not read repository source or store GitHub credentials.
+Health, financial/payment, personal communications and location remain unchecked.
+Existing Limited Use certifications remain selected; remote executable code is No.
+The deployed privacy policy was visibly verified before submission.
+
+Evidence: [submission receipt](2.0.1-submission-verification.json).
+No new account, registration fee or Edge enrollment was performed.
