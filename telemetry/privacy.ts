@@ -121,6 +121,16 @@ export function sanitizeBreadcrumb(value: any): any {
   if (value.category !== 'patchgoblin') return null;
   return {category:'patchgoblin',timestamp:value.timestamp,level:value.level,data:metadata(value.data)};
 }
+export function sanitizeReplay(event:any):any {
+  const clean=sanitizeEvent(event);
+  for(const key of ['replay_start_timestamp','timestamp','segment_id'])if(typeof event[key]==='number'&&Number.isFinite(event[key])&&event[key]>=0)clean[key]=event[key];
+  if(typeof event.replay_id==='string'&&/^[a-f0-9]{32}$/.test(event.replay_id))clean.replay_id=event.replay_id;
+  if(['session','buffer'].includes(event.replay_type))clean.replay_type=event.replay_type;
+  for(const key of ['error_ids','trace_ids'])clean[key]=(event[key]||[]).filter((id:any)=>typeof id==='string'&&/^[a-f0-9]{32}$/.test(id)).slice(0,50);
+  clean.urls=(event.urls||[]).slice(0,20).map((url:string)=>route(url));
+  clean.segment_names=(event.segment_names||[]).slice(0,20).map((name:string)=>route(name));
+  return clean;
+}
 export function sanitizeLog(log: any): any {
   if (!operations.has(log.message || log.body)) return null;
   const out:any = {};

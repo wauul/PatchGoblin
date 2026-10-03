@@ -13,7 +13,8 @@ export function replayAllowed(path: string, enabled: unknown, verified: unknown)
 export const replayOptions = {
   maskAllText:true,maskAllInputs:true,blockAllMedia:true,
   maskAttributes:['href','src','title','alt','aria-label','data-repo','data-job'],
-  block:['.sentry-block','[data-sentry-block]','pre','code','.diff','.logs','.evidence','#root[data-private]'],
+  // rrweb preserves URL-bearing attributes before maskAttributes is applied.
+  block:['.sentry-block','[data-sentry-block]','pre','code','.diff','.logs','.evidence','#root[data-private]','a','iframe','form','[data-repo]','[data-job]'],
   networkDetailAllowUrls:[],networkCaptureBodies:false,
   beforeAddRecordingEvent:(event:any)=> {
     if (event.type === 5 || event.type === 6) return null;
@@ -30,7 +31,7 @@ if (config.enabled) {
       beforeSendSpan:span=>sanitizeSpan({...span,attributes:{...span.attributes,service:'frontend',route:route(location.pathname)}}),beforeBreadcrumb:sanitizeBreadcrumb,beforeSendLog:log=>env.VITE_SENTRY_LOGS_ENABLED === 'true'&&budget.log()?sanitizeLog(log):null,
     });
     Sentry.setTag('service','frontend');
-    if (replayAllowed(location.pathname,env.VITE_SENTRY_REPLAY_ENABLED,env.VITE_SENTRY_REPLAY_PRIVACY_VERIFIED)) void import('./replay').then(({startReplay})=>startReplay()).catch(()=>{});
+    if (replayAllowed(location.pathname+location.search+location.hash,env.VITE_SENTRY_REPLAY_ENABLED,env.VITE_SENTRY_REPLAY_PRIVACY_VERIFIED)) void import('./replay').then(({startReplay})=>startReplay()).catch(()=>{});
   } catch { /* Monitoring must not block rendering. */ }
 }
 export function captureFrontend(error: unknown, operation='request'):string|undefined {

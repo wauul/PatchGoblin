@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import * as Sentry from '@sentry/node';
-import {configuration,metadata,route,sanitizeEvent,sanitizeSpan,sanitizeLog,traceMetadata,dataCollection} from '../telemetry/privacy.ts';
+import {configuration,metadata,route,sanitizeEvent,sanitizeSpan,sanitizeLog,sanitizeReplay,traceMetadata,dataCollection} from '../telemetry/privacy.ts';
 import {initTelemetry,captureFault,expectedError,requestScope,durableTrace,flushTelemetry} from '../server/telemetry.ts';
 import {ProductError} from '../server/platform-core.ts';
 import {handleProduct} from '../server/platform.ts';
@@ -29,6 +29,8 @@ test('privacy rebuilds errors/spans/logs from safe operational metadata',()=>{
  assert.deepEqual(sanitizeLog({message:'cleanup',attributes:{operation:'cleanup',status:'error',console:secret}}).attributes,{operation:'cleanup',status:'error'});
  assert.deepEqual(metadata({stage:secret,model:secret}),{});
  assert.equal(route('/api/jobs/123/submit?repo='+secret),'/api/jobs/:id/submit');
+ const replay=sanitizeReplay({type:'replay_event',replay_id:'a'.repeat(32),segment_id:0,replay_type:'session',user:{email:secret},request:{url:secret},urls:['https://patchgoblin.vercel.app/?code='+secret],segment_names:[secret],error_ids:[secret,'b'.repeat(32)]});
+ assert.ok(!JSON.stringify(replay).includes(secret));assert.deepEqual(replay.urls,['/']);assert.equal(replay.replay_id,'a'.repeat(32));
 });
 test('trace persistence bounds input and rejects unvalidated baggage',()=>{
  const parent='a'.repeat(32)+'-'+'b'.repeat(16)+'-1';
