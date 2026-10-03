@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-03T15:35:56.080Z",
+  "source": "actual production web bundle and downloaded extension ZIP; controlled anonymous API fixtures",
+  "event_ids": {
+    "frontend": [
+      "fa10c956f46e491dab334081b86f17c5"
+    ],
+    "extension": [
+      "fc2daccbb59547a99858842824372fa8"
+    ]
+  },
+  "releases": {
+    "frontend": [
+      "patchgoblin@0a11b3addb8b19e55116b1b234859f3085bf2f15"
+    ],
+    "extension": [
+      "patchgoblin@0a11b3addb8b19e55116b1b234859f3085bf2f15+extension.2.0.1"
+    ]
+  },
+  "browser_api_worker": {
+    "status": 500,
+    "event_id": "d412043d165d4d47a8b8ddfda2a4bfec",
+    "request_id": "4f76c4f3-cdae-4d6c-9120-c9d0a8f7ded1",
+    "worker_event_id": "c26173e26e7f46ce9cd9f9718f686cce",
+    "trace_id": "706897430643439c83607d661c0b3354"
+  },
+  "privacy_canaries_removed": true,
+  "extension_version": "2.0.1",
+  "native_mv3_loaded": true
+}

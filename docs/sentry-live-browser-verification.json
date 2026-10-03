@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-03T14:15:26.698Z",
+  "frontend_recovery": {
+    "english": true,
+    "french": true,
+    "reload": true,
+    "width": 390,
+    "button_height": 44
+  },
+  "packaged_extension": {
+    "manifest_v3": true,
+    "native_chromium_load": true,
+    "isolated_popup": true,
+    "shutdown": true
+  },
+  "transport": "Actual Sentry network delivery attempted; receipt must be confirmed in Sentry",
+  "frontend_envelopes": 4,
+  "extension_envelopes": 1,
+  "event_ids": {
+    "frontend": [
+      "2288e44fecd24e31a39696dca76f4d35",
+      "5c25a963a0a44a23ab6f4da28ec6fa2d",
+      "1b01a8afbdae4a799c796b82105b434d"
+    ],
+    "extension": [
+      "c6604a1647784d899c8f8f54eecae26a"
+    ]
+  },
+  "privacy_canaries_removed": true
+}

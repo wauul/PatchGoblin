@@ -8,8 +8,12 @@ Four projects in the EU organization `patchgoblin`: `patchgoblin-frontend` (Reac
 entry point; this application does not use a Next.js or Express integration.
 
 SDKs are locked by npm/uv: JavaScript 11.4.0, Python 2.71.0. JavaScript v11 uses
-`dataCollection` and `beforeSendSpan` for streamed spans. Python uses static
-transactions and explicit orchestration spans. Automatic HTTP, database, AI,
+`dataCollection` and `beforeSendSpan` for streamed browser spans. The API uses
+the supported static transaction lifecycle and `withStaticSpan` callback, plus
+`beforeSendTransaction`, to retain the full isolated request tree; this was
+confirmed in the deployed trace viewer. Python also uses static transactions
+and explicit orchestration spans. Revisit the API lifecycle before an SDK major
+upgrade; Sentry plans to retire the compatibility lifecycle. Automatic HTTP, database, AI,
 console, and repository-content integrations are disabled.
 
 See `.env.example` for every supported variable. Each server sets its own
@@ -46,11 +50,16 @@ account identity for account deletion. Review retention after any plan change.
 
 Replay is disabled. It requires **both** `VITE_SENTRY_REPLAY_ENABLED=true` and
 `VITE_SENTRY_REPLAY_PRIVACY_VERIFIED=true`. Only `/`, `/docs`, `/faq`, `/extension`
-are eligible. Text/inputs/attributes are masked, media and code/log/evidence
-elements are blocked, network details/bodies are excluded, and custom/plugin
-recording events are dropped. Account, OAuth, workbench and private pages never
-start Replay. Keep the privacy verification flag false until a captured recording
-with canary text/inputs/code has been decoded and inspected after UI changes.
+are eligible, with no query string or hash. Text, inputs and named attributes are
+masked. Media, code/log/evidence, links, forms, frames and repository/job-bearing
+elements are blocked. rrweb handles URL attributes before attribute masking, so
+links must be blocked explicitly. Network details/bodies are excluded and custom
+recording events are dropped. Replay metadata uses normalized paths and no user
+context. Account, OAuth, workbench and private pages never start Replay. Run
+`node scripts/verify-sentry-replay.mjs` to decode recordings with canaries after
+UI/SDK changes before opting in. The actual SDK recording passed this test on
+2026-10-03; no Replay was uploaded to Sentry during verification. Both production
+flags remain false by default.
 
 The sandbox bridge's copy allowlist is unchanged. Neither Sentry nor this
 telemetry module, DSNs, credentials, or network access enter execution VMs.
@@ -101,14 +110,23 @@ Local builds work without credentials and production builds warn explicitly.
 Release CI sets `SENTRY_REQUIRE_UPLOAD=true`, failing incomplete uploads instead
 of silently shipping unreadable stacks. `.github/workflows/sentry-release.yml`
 uses production environment secrets and does not publish maps as CI downloads.
+Before manually dispatching that workflow, configure GitHub's `production`
+environment variable `SENTRY_ORG=patchgoblin` and secrets `SENTRY_AUTH_TOKEN`
+(limited `org:ci`), `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID`.
+Their GitHub presence has not been verified; the approved Sentry token was saved
+locally only. Vercel supplies public frontend configuration during `pull`.
 Record Sentry deploy tracking only after a deployment succeeds; uploading maps
 alone is not a deployment. Extension packaging is separate from store publication.
 
 ## Alerting and dashboard queries
 
-The account has automatic error monitors for all four projects. Configure issue
-alerts for new/regressed production errors to the existing `#patchgoblin` team,
-with a 60-minute repeat interval; verification errors must be excluded. Cleanup,
+The account has automatic error monitors for all four projects. The active
+all-project alert (1328573) sends new/existing high-priority production issues
+to `#patchgoblin`, throttled to 30 minutes per issue. Its filters require
+`environment=production` and exclude `operation=verification`. The three duplicate
+project defaults are disabled. Actual frontend and extension failures appear
+in the alert's trigger history. The retention monitor is explicitly connected.
+Cleanup,
 release/persistence, repeated wake, and inference infrastructure faults deserve
 investigation; failed repository CI and unsupported repairs do not.
 
@@ -123,7 +141,7 @@ Operational dashboard queries (all `environment:production`):
 | Signal | Dataset / filter | Measure |
 |---|---|---|
 | API faults | Errors, `service:api` | `count()` |
-| API latency | Spans, `service:api operation:request` | `p95(span.duration)`, grouped by route |
+| API latency | Spans, `service:api operation:request` | `p95(span.duration)` |
 | Worker infrastructure faults | Errors, `service:worker` | `count()` |
 | Job stage duration | Spans, `service:worker operation:[inspect,reproduce,investigate,patch,verify,submit]` | `avg(span.duration)`, grouped by operation |
 | Measured inference usage | Logs, `service:worker operation:inference` | `sum(total_tokens)`, grouped by model |
@@ -142,7 +160,9 @@ npm run build:extension
 uv run pytest -q
 uv run ruff check worker tests
 node scripts/check-sentry-artifacts.mjs
+node scripts/verify-vercel-runtime.mjs
 node scripts/verify-sentry-browser.mjs
+node scripts/verify-sentry-replay.mjs
 ```
 
 The browser verifier needs Playwright and a working full Chrome for Testing
@@ -168,6 +188,84 @@ deployed artifact; use `sentry-cli sourcemaps explain <event ID>` with read-capa
 operator access (the build token intentionally cannot read events). Never print
 secrets, replay recordings, repository evidence, or raw event bodies into shared
 diagnostics.
+
+## Verified deployment ledger — 2026-10-03
+
+Final deployed release: `patchgoblin@578d2d0d233e7198e5b4f06b777d395664187668`.
+The extension adds `+extension.2.0.1`. The build token has only `org:ci` and
+remains in ignored `.local/sentry.env`; it is absent from runtime variables and
+public artifacts. Organization controls require scrubbing, remove user data,
+prevent IP storage, disable JavaScript source fetching, and restrict debug-file
+access to admins. Numeric token-count fields are explicitly safe; no prompt or
+response text is allowed. Received user geography is filtered, not usable location.
+
+| Component | Actual production event | Sentry issue / readable location |
+|---|---|---|
+| Frontend | `ba823052a085404b935a8b1a23a41b3b` | [151123487](https://patchgoblin.sentry.io/issues/151123487/), `web/telemetry.ts:46`, `web/ProductApp.tsx:44` via private Vite maps |
+| API | `5658ef06771a44619323beb366efa529` | [151121061](https://patchgoblin.sentry.io/issues/151121061/), original `api/index.ts` via private function maps |
+| Worker | `ab3b19d75a7d433b9465f75eccf508ac` | [151123481](https://patchgoblin.sentry.io/issues/151123481/), `worker/service.py:235`, no stack locals |
+| Extension | `7c5dab8ad1d24cf1bb35201655e5f5da` | [151121457](https://patchgoblin.sentry.io/issues/151121457/), `extension/popup.js:152` via private bundled maps |
+
+Frontend and extension events above were confirmed on the final `578d2d0` release.
+The controlled deployed API/worker faults and linked traces below were confirmed
+on `0a11b3a`; the final change only tightened frontend Replay privacy. API/worker
+telemetry code is unchanged, and final deployment health/runtime checks passed.
+
+The API/worker [production trace](https://patchgoblin.sentry.io/explore/traces/trace/a8e48eb26f854726bca6b18f2cfffa5d/)
+shows nine spans: API request → verification call → worker job → six stages,
+plus both faults and two logs. The deployed browser/API/worker share
+[trace 706897430643439c83607d661c0b3354](https://patchgoblin.sentry.io/issues/?query=trace%3A706897430643439c83607d661c0b3354).
+These were controlled fixtures, never real user jobs or private repositories.
+Source-map source context comes from uploaded application code, not customer code.
+
+The [operations dashboard](https://patchgoblin.sentry.io/dashboard/6205684/) has
+all six saved widgets. Numeric inference logs were received with eight tokens
+from an explicitly synthetic provider response in `environment:verification`.
+The production inference chart correctly excludes that fixture; it is empty until
+measured real usage arrives and must not be treated as a billing ledger.
+
+The [cron monitor](https://patchgoblin.sentry.io/monitors/2349191/) received an
+`Okay` check-in (`77f46857…`) from the actual authenticated handler driven locally
+with a SQL double. No retention data was deleted. Ownership is `#patchgoblin`.
+The first automatic Vercel execution remains to be observed at **2026-10-04
+08:00 UTC**; the monitor now detects misses.
+
+Final Vercel deployment: `dpl_4y7vNDSWjUffsGD2CmDhQfym1Xev`, serving
+[patchgoblin.vercel.app](https://patchgoblin.vercel.app).
+Final Railway deployment: `f2358e95-e2f2-4b10-955e-a259014ccfb4`, serving
+[worker health](https://worker-production-ac16.up.railway.app/health).
+Sentry deploy records were created after both hosts reported successful deployment.
+Anonymous bootstrap and worker health return 200. Private maps are absent from
+static files and ZIP; a public map request returns 403 without map content.
+
+Both temporary verification branches and their credential were removed. The API
+now follows ordinary unauthenticated routing (401) and the worker returns 404,
+even with the old verification header. Four temporary Vercel deployments were
+deleted and each URL was verified 404. The production extension download matches
+the locally built 2.0.1 ZIP (SHA256 in `sentry-final-deployment-verification.json`).
+`sentry-endpoint-removal-verification.json` records removal using the original
+credential before deleting it locally; the final check uses a harmless fixture
+header. `sentry-cross-service-verification.json` preserves the deployed three-
+component trace, and `sentry-production-browser-verification.json` records the
+final shipped web/extension release. Temporary branches are also absent from the
+final compiled API and worker source.
+**2.0.1 is packaged and downloadable; it was not submitted/published to stores.**
+
+Passed: `npm test` (39), both npm builds, `uv run pytest -q` (79), Ruff,
+compiled native-ESM Vercel bootstrap, public-artifact scans, English/French
+390px recovery UI/reload with 44px controls, native MV3 popup/shutdown, and actual
+SDK payload canaries. JSON evidence files distinguish local intercepted transport,
+live SaaS transport, controlled deployed routes, and final endpoint removal.
+
+Replay privacy verification decoded the actual SDK recording and checked text,
+input, code, logs, evidence, URL and cookie canaries, plus excluded account and
+query-string routes. Production Replay remains off; turning it on is an explicit
+configuration choice, not required for error/tracing coverage.
+
+Remaining gates: automatic retention execution is pending its next
+scheduled run. The manual GitHub release workflow still needs its documented
+production environment secrets/variables before use; the approved build token was
+saved locally only. Local private uploads and production deployments are verified.
 
 References: [Sentry shared environments](https://docs.sentry.io/platforms/javascript/best-practices/shared-environments/),
 [Vite maps](https://docs.sentry.io/platforms/javascript/guides/react/sourcemaps/uploading/vite/),

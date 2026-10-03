@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-03T15:35:53.403Z",
+  "release": "patchgoblin@0a11b3addb8b19e55116b1b234859f3085bf2f15",
+  "transport": "deployed Vercel API -> deployed Railway trusted worker",
+  "protection_statuses": [
+    404,
+    404
+  ],
+  "api_status": 500,
+  "worker_health": 200,
+  "anonymous_bootstrap": 200,
+  "event_id": "5658ef06771a44619323beb366efa529",
+  "request_id": "d93b232f-91d0-463f-b5b2-43cae968d648",
+  "worker_event_id": "ab3b19d75a7d433b9465f75eccf508ac",
+  "trace_id": "a8e48eb26f854726bca6b18f2cfffa5d"
+}

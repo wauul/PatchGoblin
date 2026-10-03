@@ -1,0 +1,8 @@
+{
+  "release": "patchgoblin@546b08b73b0e77af129452ef9909b3e8151b69d9",
+  "event_id": "5ef6e255ad2142f6a023c0f2bdfc89ed",
+  "trace_id": "794adc16671a4212b25ca32d5aa2db16",
+  "runtime": "local trusted Python SDK with persisted API parent; no production queue job",
+  "parent_event_id": "4d3722bd5f08411c8378d5e4df51d872",
+  "inference_usage": "synthetic provider response fixture, not billed Groq usage"
+}

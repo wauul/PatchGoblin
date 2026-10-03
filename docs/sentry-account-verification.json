@@ -1,0 +1,54 @@
+{
+  "verified_on": "2026-10-03",
+  "method": "authenticated Sentry UI; received event details and saved account controls",
+  "organization": "patchgoblin",
+  "final_release": "patchgoblin@578d2d0d233e7198e5b4f06b777d395664187668",
+  "final_frontend": {
+    "event": "ba823052a085404b935a8b1a23a41b3b",
+    "issue": "https://patchgoblin.sentry.io/issues/151123487/",
+    "mapped_stack": "web/telemetry.ts:46 and web/ProductApp.tsx:44"
+  },
+  "final_extension": {
+    "event": "7c5dab8ad1d24cf1bb35201655e5f5da",
+    "issue": "https://patchgoblin.sentry.io/issues/151121457/",
+    "mapped_stack": "extension/popup.js:152",
+    "release_suffix": "+extension.2.0.1"
+  },
+  "controlled_api_worker_trace": {
+    "trace": "a8e48eb26f854726bca6b18f2cfffa5d",
+    "spans": 9,
+    "logs": 2,
+    "verified_release": "patchgoblin@0a11b3addb8b19e55116b1b234859f3085bf2f15",
+    "note": "Final change tightened frontend Replay privacy; backend telemetry unchanged. Temporary verification branches subsequently removed."
+  },
+  "dashboard": {
+    "url": "https://patchgoblin.sentry.io/dashboard/6205684/",
+    "saved_widgets": 6,
+    "api_p95_nonzero_ms": 216.206,
+    "production_inference_chart": "empty; synthetic verification usage intentionally excluded"
+  },
+  "alert": {
+    "id": 1328573,
+    "projects": "all",
+    "environment": "production",
+    "excluded_operation": "verification",
+    "recipient_team": "patchgoblin",
+    "throttle_minutes": 30,
+    "actual_trigger_history_verified": true,
+    "cron_connected": true
+  },
+  "cron": {
+    "id": 2349191,
+    "slug": "new-monitor",
+    "schedule": "0 8 * * *",
+    "timezone": "Etc/UTC",
+    "received_status": "Okay",
+    "verification": "real authenticated handler run locally with SQL double; no production retention deletion",
+    "first_automatic_execution_pending": "2026-10-04T08:00:00Z"
+  },
+  "user_geography": "Filtered placeholders; no usable location",
+  "source_fetching": false,
+  "build_token_scope": "org:ci",
+  "build_token_storage": "ignored local file only; absent from runtime and public artifacts",
+  "store_publication": "2.0.1 packaged and downloadable; not store-published by this task"
+}

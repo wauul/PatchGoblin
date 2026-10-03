@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-03T15:59:26.801Z",
+  "transport": "intercepted local SDK envelopes; no Sentry Replay uploaded",
+  "recordings_decoded": 1,
+  "recorded_event_counts": [
+    5
+  ],
+  "text_inputs_code_logs_evidence_url_cookie_canaries_removed": true,
+  "private_account_route_excluded": true,
+  "query_string_route_excluded": true,
+  "production_replay_enabled": false
+}

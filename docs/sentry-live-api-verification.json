@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-03T14:38:22.397Z",
+  "runtime": "local Node SDK and actual product catch path with SQL double",
+  "release": "patchgoblin@5b4fa7279259a56522eb9672662ba6d92f00281a",
+  "trace_id": "794adc16671a4212b25ca32d5aa2db16",
+  "event_id": "4d3722bd5f08411c8378d5e4df51d872",
+  "request_id": "6bb35221-8cdf-49e0-9689-8e38c3b7d602",
+  "status": 500
+}

@@ -1,0 +1,33 @@
+{
+  "at": "2026-10-03T15:34:35.671Z",
+  "release": "patchgoblin@0a11b3addb8b19e55116b1b234859f3085bf2f15",
+  "monitor_slug": "new-monitor",
+  "status": 200,
+  "deliveries": [
+    {
+      "types": [
+        "check_in"
+      ],
+      "status": 200
+    },
+    {
+      "types": [
+        "transaction"
+      ],
+      "status": 200
+    },
+    {
+      "types": [
+        "client_report"
+      ],
+      "status": 200
+    },
+    {
+      "types": [
+        "check_in"
+      ],
+      "status": 200
+    }
+  ],
+  "source": "local actual authenticated retention handler with controlled SQL double; no production database mutation; scheduled Vercel execution still pending"
+}

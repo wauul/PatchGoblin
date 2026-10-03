@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-03T15:34:43.863Z",
+  "frontend_recovery": {
+    "english": true,
+    "french": true,
+    "reload": true,
+    "width": 390,
+    "button_height": 44
+  },
+  "packaged_extension": {
+    "manifest_v3": true,
+    "native_chromium_load": true,
+    "isolated_popup": true,
+    "shutdown": true
+  },
+  "transport": "Playwright intercept of actual SDK envelopes; not Sentry SaaS receipt",
+  "frontend_envelopes": 3,
+  "extension_envelopes": 2,
+  "event_ids": {
+    "frontend": [
+      "2cfc49d116fe42eca8694f6db195f43e",
+      "7e31e0bd279243988a69d4ae315b5475",
+      "68e42832d5de44b8946f7af7fc1e157a"
+    ],
+    "extension": [
+      "1c6151ef56824e1fa5a9953623b941ba",
+      "b57ada4aec7e4e329f7c9cc36e95703a"
+    ]
+  },
+  "privacy_canaries_removed": true
+}

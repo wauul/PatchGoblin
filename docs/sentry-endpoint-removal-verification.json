@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-03T15:40:56.311Z",
+  "web_status": 200,
+  "anonymous_bootstrap": 200,
+  "worker_health": 200,
+  "verification_routes_removed": [
+    {
+      "url": "https://patchgoblin.vercel.app/api/__sentry_verify",
+      "status": 401
+    },
+    {
+      "url": "https://worker-production-ac16.up.railway.app/__sentry_verify",
+      "status": 404
+    }
+  ],
+  "old_verification_deployments_removed": [
+    {
+      "url": "https://patchgoblin-5mh8xzfhw-wauuls-projects.vercel.app",
+      "status": 404
+    },
+    {
+      "url": "https://patchgoblin-rdk3k8guh-wauuls-projects.vercel.app",
+      "status": 404
+    },
+    {
+      "url": "https://patchgoblin-656acgmfv-wauuls-projects.vercel.app",
+      "status": 404
+    },
+    {
+      "url": "https://patchgoblin-bfuz5pky9-wauuls-projects.vercel.app",
+      "status": 404
+    }
+  ],
+  "extension_download_sha256": "7f861e368ee72c28ce8d4cae689b79a3e299b491d2f982bd269db381ddd5efdd",
+  "public_map_status": 403,
+  "public_map_absent": true,
+  "vercel_deployment": "dpl_327DP12K7CHjGS3SegeQ3N3hJBTU",
+  "railway_deployment": "6d4b0ab8-b73a-445c-b39e-6297b1141dd1",
+  "release": "patchgoblin@0a11b3addb8b19e55116b1b234859f3085bf2f15"
+}
