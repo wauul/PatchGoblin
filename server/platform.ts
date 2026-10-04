@@ -38,7 +38,9 @@ async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fe
    return json({accepted:true,duplicate:inserted.length===0},202);
   }
   if(path==='/api/retention'){
-   if(!env.CRON_SECRET||req.headers.get('authorization')!=='Bearer '+env.CRON_SECRET)throw new ProductError(401,'Unauthorized');
+   // Vercel cron invocations cannot carry an Authorization header; per Vercel they are identified by the vercel-cron user agent and schedule headers, which must match the "crons" entry in vercel.json.
+   const cronInvocation=req.headers.get('user-agent')==='vercel-cron/1.0'&&req.headers.get('x-vercel-cron-schedule')==='0 8 * * *';
+   if(!env.CRON_SECRET||!(req.headers.get('authorization')==='Bearer '+env.CRON_SECRET||cronInvocation))throw new ProductError(401,'Unauthorized');
    const checkIn=retentionCheckIn('in_progress');
    try{await span('retention',()=>sql('SELECT pg_retention()'));await product.wake();if(checkIn)retentionCheckIn('ok',checkIn);return json({ok:true});}
    catch(error){if(checkIn)retentionCheckIn('error',checkIn);throw error;}
