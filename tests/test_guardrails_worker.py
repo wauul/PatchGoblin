@@ -9,6 +9,26 @@ from worker.security import public_prose
 from worker.railway_sandbox import RailwaySandbox
 
 
+def test_database_limits_are_transaction_local_for_neon_pooling(monkeypatch):
+    from worker import database
+    statements = []
+    class Connection:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def execute(self, statement):
+            statements.append(statement)
+    def open_connection(*args, **kwargs):
+        assert 'options' not in kwargs
+        assert not kwargs.get('autocommit', False)
+        return Connection()
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://fixture')
+    monkeypatch.setattr(database.psycopg, 'connect', open_connection)
+    with database.connect():
+        assert statements == ["SET LOCAL statement_timeout='10s'", "SET LOCAL lock_timeout='5s'"]
+
+
 def connection_fixture(monkeypatch, value):
     class DB:
         def execute(self, *args):

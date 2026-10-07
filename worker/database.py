@@ -4,13 +4,20 @@ import json
 import os
 import time
 import uuid
+from contextlib import contextmanager
 import psycopg
 from psycopg.rows import dict_row
 from worker.security import redact_data
 
 
+@contextmanager
 def connect():
-    return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=15,options='-c statement_timeout=10000 -c lock_timeout=5000')
+    # Transaction-local limits work with Neon's transaction pooler, which rejects
+    # these settings in the connection startup packet.
+    with psycopg.connect(os.environ["DATABASE_URL"],row_factory=dict_row,connect_timeout=15) as db:
+        db.execute("SET LOCAL statement_timeout='10s'")
+        db.execute("SET LOCAL lock_timeout='5s'")
+        yield db
 
 
 @telemetry.instrument('database')
