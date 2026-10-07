@@ -36,9 +36,9 @@ jobs:
           CASE_ID: ${{ inputs.case }}
         run: |
           if [ -n "$CASE_ID" ]; then
-            uv run --frozen python -m worker.evaluate --case "$CASE_ID" --baseline
+            uv run --frozen python -m worker.evaluate --case "$CASE_ID" --baseline --gate
           else
-            uv run --frozen python -m worker.evaluate --baseline
+            uv run --frozen python -m worker.evaluate --baseline --gate
           fi
       - uses: actions/upload-artifact@v4
         if: always()

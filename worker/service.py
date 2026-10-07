@@ -11,16 +11,51 @@ from worker.agent import Agent
 from worker.database import DatabaseStore, claim, connect
 from worker.github import GitHub
 from worker.railway_sandbox import RailwaySandbox, destroy
-from worker.security import redact
+from worker.security import redact, public_prose
 from worker.submit import submit
 from worker.app_auth import InstallationGitHub
 from worker.pipeline_agent import PipelineAgent
 from worker.webhooks import drain_deliveries
+from worker.guardrails import require_feature, authorize_actor, audit
 
 telemetry.init()
 
 DRAIN_LOCK = threading.Lock()
 DELIVERY_LOCK = threading.Lock()
+WAKE_LOCK = threading.Lock()
+WAKE_WINDOW = 0
+WAKE_COUNT = 0
+
+
+def wake_allowed():
+    global WAKE_WINDOW, WAKE_COUNT
+    with WAKE_LOCK:
+        window = int(time.monotonic() // 60)
+        if window != WAKE_WINDOW:
+            WAKE_WINDOW, WAKE_COUNT = window, 0
+        WAKE_COUNT += 1
+        return WAKE_COUNT <= 30
+
+
+class BoundedHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    def __init__(self, *args, **kwargs):
+        self.connections = threading.BoundedSemaphore(32)
+        super().__init__(*args, **kwargs)
+    def process_request(self, request, address):
+        if not self.connections.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, address)
+        except BaseException:
+            self.connections.release()
+            raise
+    def process_request_thread(self, request, address):
+        try:
+            super().process_request_thread(request, address)
+        finally:
+            self.connections.release()
 
 
 @telemetry.instrument('cleanup')
@@ -80,14 +115,24 @@ def _execute(row):
             raise ValueError("Invalid durable job request")
         if request.get("owner") != row["owner_key"]:
             raise ValueError("Durable job owner mismatch")
+        require_feature('jobs')
         github = (
             InstallationGitHub(int(row["installation_id"]), int(row["repository_id"]), request["repo"])
             if row.get("installation_id")
             else GitHub()
         )
+        if row.get('installation_id'):
+            authorize_actor(github, int(row['account_id']))
+            def write_guard():
+                require_feature('submission')
+                authorize_actor(github, int(row['account_id']))
+            github.write_guard = write_guard
         agent = (PipelineAgent if request.get("mode") in {"builder", "maintenance"} else Agent)(github, store)
+        github.deadline = agent.deadline
+        agent.before_inference = lambda: require_feature('inference')
         agent.sandbox_factory = lambda root, cancelled, deadline: RailwaySandbox(
-            root, cancelled, deadline, {"repo": agent.state["repo"], "sha": agent.state["sha"]}, store.sandbox
+            root, cancelled, deadline, {"repo": agent.state["repo"], "sha": agent.state["sha"]}, store.sandbox,
+            lambda: require_feature('sandbox')
         )
         result = agent.execute(request)
         if row.get("repository_id") and result.get("coverage"):
@@ -100,6 +145,8 @@ def _execute(row):
             try:
                 telemetry.stage('submit')
                 result.update(submit(github, row["id"], request, result, lambda: store.cancelled(force=True)))
+                if row.get('account_id'):
+                    audit(int(row['account_id']), 'submit', row['id'])
             except Exception as exc:
                 telemetry.capture(exc, "submit")
                 result["pr_error"] = redact(str(exc))[:1000]
@@ -118,9 +165,9 @@ def _execute(row):
                         "details_url": os.getenv("APP_URL") + "/workbench?job=" + str(row["id"]),
                         "output": {
                             "title": result["status"].capitalize(),
-                            "summary": redact(result.get("diagnosis", ""))
+                            "summary": public_prose(result.get("diagnosis", ""))
                             + "\n\n"
-                            + ("\n".join(result.get("evidence", [])))[:3000]
+                            + public_prose("\n".join(result.get("evidence", [])))
                             + "\n\n"
                             + (result.get("pr_url") or "No unverified pull request was opened."),
                         },
@@ -159,11 +206,16 @@ def drain():
 
 
 def _drain():
+    started = time.monotonic()
     try:
         cleanup()
         while True:
-            while drain_deliveries():
-                pass
+            if time.monotonic() - started > 900:
+                break
+            for _ in range(100):
+                if not drain_deliveries():
+                    break
+            require_feature('jobs')
             row = claim()
             if row:
                 execute(row)
@@ -196,8 +248,9 @@ def wake():
 
         def _reconcile_pending():
             try:
-                while drain_deliveries():
-                    pass
+                for _ in range(100):
+                    if not drain_deliveries():
+                        break
             except Exception as exc:
                 telemetry.capture(exc, 'reconcile')
                 print(json.dumps({'level':'error','message':redact(str(exc))[:1000]}), flush=True)
@@ -207,6 +260,9 @@ def wake():
 
 
 class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(10)
     def log_message(self, *args):
         pass
 
@@ -228,8 +284,10 @@ class Handler(BaseHTTPRequestHandler):
         expected = "Bearer " + os.environ["WORKER_WAKE_TOKEN"]
         if not hmac.compare_digest(self.headers.get("Authorization", ""), expected):
             return self.respond(401, {"error": "Unauthorized"})
-        if int(self.headers.get("Content-Length", "0")) != 0:
+        if self.headers.get('Transfer-Encoding') or self.headers.get("Content-Length", "0") != '0':
             return self.respond(400, {"error": "Wake requests must have an empty body"})
+        if not wake_allowed():
+            return self.respond(429, {'error': 'Wake request limit reached'})
         wake()
         self.respond(202, {"accepted": True})
 
@@ -245,7 +303,7 @@ def main():
     ]:
         if not os.getenv(name):
             raise RuntimeError("Missing required worker setting: " + name)
-    server = ThreadingHTTPServer(("0.0.0.0", int(os.getenv("PORT", "8080"))), Handler)
+    server = BoundedHTTPServer(("0.0.0.0", int(os.getenv("PORT", "8080"))), Handler)
     wake()
     server.serve_forever()
 

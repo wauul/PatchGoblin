@@ -1,10 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
-import {handleProduct} from '../server/platform.ts';
+import {handleProduct as actualHandleProduct} from '../server/platform.ts';
 import {Product,encrypt,decrypt,validSignature,localReturn,hash} from '../server/platform-core.ts';
 const env={APP_URL:'https://patchgoblin.vercel.app',TOKEN_ENCRYPTION_KEY:'12'.repeat(32),GITHUB_WEBHOOK_SECRET:'unit-test-secret',WORKER_URL:'https://worker.invalid',WORKER_WAKE_TOKEN:'test'};
 const never=async()=>{throw Error('Unexpected provider call');};
+// Existing behavior tests use an explicit healthy limiter fixture; failure paths
+// and the real database functions are tested separately in guardrails tests.
+const handleProduct:typeof actualHandleProduct=(req,configuration,fetcher,query)=>{
+ const headers=new Headers(req.headers);headers.set('x-vercel-forwarded-for','203.0.113.8');
+ return actualHandleProduct(new Request(req,{headers}),{...configuration,VERCEL:'1'},fetcher,async(sql,args)=>sql.includes('pg_rate_limit')?[{allowed:true}]:query!(sql,args));
+};
 test('product authentication ignores owner flags and client-supplied identities',async()=>{
  const response=await handleProduct(new Request(env.APP_URL+'/api/jobs',{headers:{'oai-authenticated-user-id':'owner'}}),{...env,PRIVATE_OWNER_MODE:'true',VERCEL_PRIVATE_OWNER_MODE:'true'},never as typeof fetch,never);
  assert.equal(response.status,401);
@@ -32,7 +38,7 @@ test('invalid webhook signatures never enter durable storage',async()=>{
 });
 test('duplicate signed deliveries retain exactly one durable identity',async()=>{
  const seen=new Set<string>();let inserts=0;
- const query=async(sql:string,args:any[]=[]):Promise<any[]>=>{assert.ok(sql.includes('ON CONFLICT(id) DO NOTHING'));const id=args[0];if(seen.has(id))return [];seen.add(id);inserts++;return [{id}];};
+ const query=async(sql:string,args:any[]=[]):Promise<any[]>=>{assert.ok(sql.includes('pg_accept_delivery'));const id=args[0];if(seen.has(id))return [{inserted:false}];seen.add(id);inserts++;return [{inserted:true}];};
  const raw=JSON.stringify({action:'completed',installation:{id:1,account:{login:'example'}},repository:{id:2,full_name:'example/repo'},workflow_run:{id:42,status:'completed',conclusion:'failure',head_sha:'a'.repeat(40),head_branch:'main'}});
  const headers={'x-hub-signature-256':'sha256='+createHmac('sha256',env.GITHUB_WEBHOOK_SECRET).update(raw).digest('hex'),'x-github-event':'workflow_run','x-github-delivery':'delivery-000000000001'};
  const first=await handleProduct(new Request(env.APP_URL+'/api/github/webhook',{method:'POST',headers,body:raw}),env,async()=>new Response(null,{status:202}),query);
@@ -52,7 +58,8 @@ test('a consumed OAuth state or different browser cannot exchange a code',async(
 });
 test('sign-in uses the dedicated identity OAuth App without repository scopes',async()=>{
  let purpose='';
- const response=await handleProduct(new Request(env.APP_URL+'/api/auth/login'),{...env,GITHUB_OAUTH_CLIENT_ID:'identity-client',GITHUB_CLIENT_ID:'repository-client'},never as typeof fetch,async(sql)=>{purpose=sql;return [];});
+ const request=new Request(env.APP_URL+'/api/auth/login',{method:'POST',headers:{origin:env.APP_URL,'content-type':'application/x-www-form-urlencoded'},body:'cf-turnstile-response=fixture-token'});
+ const response=await handleProduct(request,{...env,GITHUB_OAUTH_CLIENT_ID:'identity-client',GITHUB_CLIENT_ID:'repository-client',TURNSTILE_SECRET:'test-secret',TURNSTILE_HOSTNAMES:'patchgoblin.vercel.app'},async()=>Response.json({success:true,action:'login',hostname:'patchgoblin.vercel.app'}),async(sql)=>{purpose=sql;return [];});
  const location=new URL(response.headers.get('location')!);
  assert.equal(location.searchParams.get('client_id'),'identity-client');assert.equal(location.searchParams.get('scope'),'');
  assert.equal(location.searchParams.get('code_challenge_method'),'S256');assert.ok(purpose.includes("'identity'"));

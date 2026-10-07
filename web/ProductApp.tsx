@@ -1681,6 +1681,23 @@ function Account({ boot }: any) {
   const [confirm, setConfirm] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  async function exportData() {
+    setBusy(true);setError('');
+    try {
+      let after=0,complete=false,result:any;const jobs:any[]=[];
+      for(let page=0;page<100;page++){
+        const data=await api('/account/export?after='+after);
+        result=data;jobs.push(...data.jobs);
+        if(data.next_after===null){complete=true;break;}
+        if(!Number.isSafeInteger(data.next_after)||data.next_after<=after)throw new Error(t('Export could not be completed. Try again later.'));
+        after=data.next_after;
+      }
+      if(!complete)throw new Error(t('Export could not be completed. Try again later.'));
+      const {next_after:_cursor,...metadata}=result;
+      const url=URL.createObjectURL(new Blob([JSON.stringify({...metadata,jobs},null,2)],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;link.download='patchgoblin-data.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    } catch(e){setError((e as Error).message);} finally{setBusy(false);}
+  }
   async function remove() {
     setBusy(true);
     try {
@@ -1708,10 +1725,10 @@ function Account({ boot }: any) {
             "Sessions last up to seven days. Sign out to revoke the current session immediately. Separately authorized GitHub App credentials remain encrypted on the server; identity-only sign-in tokens are not stored.",
           )}
         </p>
-        <a href="/api/account/export" className="secondary">
+        <button type="button" onClick={exportData} disabled={busy} className="secondary">
           <Download aria-hidden="true" size={16} />
           {t("Export my data")}
-        </a>
+        </button>
         <a
           href="https://github.com/settings/installations"
           target="_blank"
@@ -1723,7 +1740,7 @@ function Account({ boot }: any) {
         </a>
         <p>
           {t(
-            "Export includes profile metadata, repository settings and your jobs with evidence. It never includes authentication tokens.",
+            "Export includes profile metadata, repository settings and evidence from repositories you can currently access. It never includes authentication tokens.",
           )}
         </p>
       </section>
@@ -2009,6 +2026,8 @@ function Information({ page, config }: any) {
           </p>
           <h2>{t("Error monitoring")}</h2>
           <p>{t("When configured, Sentry receives sanitized operational errors, timings and measured model token counts from the web app, API, trusted worker and extension popup. Tokens, cookies, account identities, private repository names, source code, patches, CI output, model prompts and responses, and request bodies are excluded. Sentry may receive network metadata when telemetry is delivered. Session Replay is disabled by default; if enabled after privacy verification, it is restricted to public pages with masked text and inputs and blocked code, logs and evidence. Sensitive account and workbench pages are excluded. Production monitoring uses our EU Sentry organization on the Developer plan. Error events are retained for 30 days; sampled tracing data may be retained for up to 13 months under Sentry policy. Operational logs follow Sentry retention policy. Reporting is disabled in local development unless explicitly enabled for verification. Account deletion cannot look up anonymous telemetry by identity.")}</p>
+          <p>{t("Optional Langfuse monitoring receives only operational metadata, prompt version hashes and token counts. Repository content, model prompts and responses, credentials and account identities are excluded. Its retention follows the configured Langfuse project policy.")}</p>
+          <p>{t("Sign-in uses Cloudflare Turnstile to prevent automated abuse. Cloudflare processes verification and network metadata under its own privacy policy. Pseudonymous request counters expire shortly after their rate window. Usage reservations remain for up to 32 days and sensitive-action records for up to 90 days, including after account deletion, to prevent deletion from resetting service limits. These records contain no source code, job evidence or credentials.")}</p>
           <p>{t("Vercel Speed Insights measures web page performance. Before performance events are sent, we remove URL query strings, fragments and credentials and report only fixed application routes. Unknown paths are grouped under /not-found. Repository names, run IDs and OAuth values in URLs are excluded.")}</p>
           <h2>{t("Third parties")}</h2>
           <p>

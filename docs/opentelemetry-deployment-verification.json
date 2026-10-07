@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-07T15:08:31.983Z",
+  "release": "patchgoblin@0713b3347051abe847d54d342d2ca76193c80a05",
+  "source_type": "local source snapshot; not a Git commit",
+  "vercel_deployment": "dpl_DBy3VTJqq5X6TEGrN57DgsA5BzmU",
+  "railway_deployment": "56cb7e59-11bc-4b2e-8475-f445b8845dca",
+  "web_status": 200,
+  "anonymous_bootstrap": 200,
+  "worker_health": 200,
+  "frontend_release_verified": true,
+  "preserved_extension_sha256": "04943a7811daa929f93e8e7289c157a056d1026bdf1fed9426532dbb07ebb89c",
+  "public_map_status": 403,
+  "public_map_absent": true,
+  "synthetic_ping": {
+    "status": 202,
+    "trace_id": "be53c22ba42cd1cd26cb1abd98896d88",
+    "parent_span_id": "7bed4782b962b453",
+    "delivery_id": "f4accee8-978a-4001-ad38-fdce232acf68",
+    "request_id": "395eb636-dc73-4891-953f-d112aa1bc2fa",
+    "repository_job_created": false
+  },
+  "live_sentry_receipt": "Confirmed in authenticated Sentry trace UI: five production spans (request, webhook, database, delivery, wake), matching release and zero issues",
+  "live_langfuse_job_link": "not exercised; no repository or inference job created",
+  "sentry_trace_url": "https://patchgoblin.sentry.io/explore/traces/trace/be53c22ba42cd1cd26cb1abd98896d88/",
+  "sentry_deploy_records": [
+    "frontend",
+    "api",
+    "worker"
+  ]
+}

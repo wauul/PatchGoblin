@@ -10,6 +10,8 @@ Small dependency patches and CI updates, backed by actual command evidence. Patc
 
 The public application runs on **Vercel**, inference uses **Groq GPT-OSS-20B**, durable jobs/account data use **Neon Postgres**, and the **Railway** worker executes checks in disposable Railway VMs with restricted Docker containers. The old Sites address redirects to Vercel. Historical results remain identifiable; illustrative demos are labeled and execute nothing.
 
+The worker's model decisions use **LangChain** runnables and a **LangGraph** prepare/infer/validate graph. Optional **Langfuse** observations export only allowlisted metadata and usage. LLMOps includes prompt hashes, locked dependencies, regression checks and a strict live-evaluation gate. See [setup and verification boundaries](docs/llmops.md).
+
 The **Patch Bench** identity carries the existing goblin's forest and lime colors through marketing, workspace, documentation and the extension. Light/dark appearance uses one sun/moon button; styled English/French menus and appearance persist. See [design system](DESIGN.md), [design coverage and verification](docs/design-coverage.md) and [design sources/licenses](docs/design-resources.md).
 
 ## Web application

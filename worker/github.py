@@ -46,10 +46,36 @@ class GitHub:
         )
         self.calls = 0
 
+    def bounded_request(self, client, method, url, maximum, **kwargs):
+        """Reject while downloading, including decompressed HTTP response bytes."""
+        remaining = getattr(self, 'deadline', time.monotonic() + 45) - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Job runtime budget exhausted')
+        kwargs['timeout'] = min(kwargs.get('timeout', 45), remaining)
+        with client.stream(method, url, **kwargs) as response:
+            declared = response.headers.get('content-length')
+            if declared and (not declared.isdigit() or int(declared) > maximum):
+                raise ValueError('Download exceeds size limit')
+            chunks, size = [], 0
+            for chunk in response.iter_bytes():
+                size += len(chunk)
+                if size > maximum or time.monotonic() > getattr(self, 'deadline', float('inf')):
+                    raise ValueError('Download exceeds size or duration limit')
+                chunks.append(chunk)
+            return httpx.Response(response.status_code, headers=response.headers, content=b''.join(chunks), request=response.request)
+
+    def bounded_get(self, client, url, maximum):
+        return self.bounded_request(client, 'GET', url, maximum)
+
     def request(self, method, path, **kwargs):
         self.calls += 1
         for attempt in range(3):
-            response = self.client.request(method, path, **kwargs)
+            if hasattr(self, 'deadline'):
+                remaining = self.deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError('Job runtime budget exhausted')
+                kwargs['timeout'] = min(30, remaining)
+            response = self.bounded_request(self.client, method, path, 2_000_000, **kwargs)
             delay = rate_limit_delay(response)
             if delay is not None:
                 raise GitHubRateLimit(delay)
@@ -63,24 +89,27 @@ class GitHub:
     def download(self, repo: str, sha: str, root: Path):
         # Obtain an archive through the installation API. Never forward authorization
         # to the signed download origin.
-        archive = self.client.get(f"/repos/{repo}/tarball/{sha}")
+        archive = self.bounded_get(self.client, f"/repos/{repo}/tarball/{sha}", 20_000_000)
         self.calls += 1
         if archive.status_code == 302:
             with httpx.Client(timeout=45) as public:
-                r = public.get(archive.headers["location"])
+                r = self.bounded_get(public, archive.headers["location"], 20_000_000)
         elif archive.is_success:
             r = archive
         else:
             with httpx.Client(timeout=45) as public:
-                r = public.get(f"https://codeload.github.com/{repo}/tar.gz/{sha}")
+                r = self.bounded_get(public, f"https://codeload.github.com/{repo}/tar.gz/{sha}", 20_000_000)
         if not r.is_success:
             raise RuntimeError(f"GitHub archive download HTTP {r.status_code}")
         if len(r.content) > 20_000_000:
             raise ValueError("Repository exceeds 20 MB archive limit")
         with tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz") as tar:
-            members = tar.getmembers()
-            if len(members) > 5000 or sum(m.size for m in members) > 100_000_000:
-                raise ValueError("Repository exceeds extraction limit")
+            members, expanded = [], 0
+            for member in tar:
+                expanded += member.size
+                if len(members) >= 5000 or expanded > 100_000_000:
+                    raise ValueError('Repository exceeds extraction limit')
+                members.append(member)
             for member in members:
                 if member.issym() or member.islnk() or not member.isfile():
                     continue
@@ -105,11 +134,11 @@ class GitHub:
         failed = [j for j in jobs if j["conclusion"] == "failure"]
         logs = [filter_logs(stored_logs)] if isinstance(stored_logs, str) else []
         for job in [] if logs else failed[:2]:
-            response = self.client.get(f"/repos/{repo}/actions/jobs/{job['id']}/logs")
+            response = self.bounded_get(self.client, f"/repos/{repo}/actions/jobs/{job['id']}/logs", 2_000_000)
             self.calls += 1
             if response.status_code == 302:
                 with httpx.Client(timeout=30) as anonymous:
-                    r = anonymous.get(response.headers["location"])
+                    r = self.bounded_get(anonymous, response.headers["location"], 2_000_000)
                 if not r.is_success:
                     raise RuntimeError(f"CI log download HTTP {r.status_code}")
                 logs.append(filter_logs(r.text))

@@ -1,6 +1,7 @@
 import {Product,ProductError,json,redirect,cookie,cookies,hash,random,encrypt,localReturn,repositoryName,validSignature,type ProductEnv,type Query} from './platform-core.js';
 import {requestScope,captureFault,durableTrace,span,operationalLog,retentionCheckIn,responseStatus} from './telemetry.js';
 import {route} from '../telemetry/privacy.js';
+import {Guardrails,checkMethod,clientIp,limitedText,loginChallenge,verifyChallenge} from './guardrails.js';
 const terminal=new Set(['submitted','verified','unsupported','failed','cancelled']);
 const limits={concurrency:1,steps:6,attempts:2,runtime_seconds:600,model_tokens:12000,account_hourly_jobs:8,repository_daily_jobs:3,service_daily_jobs:30};
 const jobView=(r:any)=>{const {telemetry:_trace,...request}=r.request||{};return {...r.state,...request,id:Number(r.id),status:r.status,created_at:r.created_at,updated_at:r.updated_at};};
@@ -15,42 +16,58 @@ export async function handleProduct(req:Request,env:ProductEnv,fetcher:typeof fe
 }
 async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fetch,query?:Query):Promise<Response>{
  const url=new URL(req.url),path=url.pathname,product=new Product(env,fetcher,query),sql=product.sql;
- const origin=env.APP_URL||'https://patchgoblin.vercel.app';
- const readBody=async()=>{if(req.headers.get('origin')!==origin||req.headers.get('sec-fetch-site')==='cross-site')throw new ProductError(403,'Cross-origin requests are forbidden.');const raw=await req.text();if(raw.length>10000)throw new ProductError(413,'Request is too large.');try{return JSON.parse(raw)}catch{throw new ProductError(400,'Request must contain JSON.');}};
+ const origin=env.APP_URL||'https://patchgoblin.vercel.app',guard=new Guardrails(sql,env);
+ const checkOrigin=()=>{if(req.headers.get('origin')!==origin||req.headers.get('sec-fetch-site')==='cross-site')throw new ProductError(403,'Cross-origin requests are forbidden.');};
+ const readBody=async()=>{checkOrigin();const raw=await limitedText(req,10000);try{const value=JSON.parse(raw);if(!value||typeof value!=='object'||Array.isArray(value))throw Error();return value;}catch{throw new ProductError(400,'Request must contain a JSON object.');}};
+ const notifyBudgets=async()=>{const alerts=await sql('SELECT * FROM pg_budget_alerts()');for(const _alert of alerts){const error=new Error('A service budget reached eighty percent.');error.name='GuardrailBudgetAlert';captureFault(error,'retention');}return alerts.length;};
  try{
+  checkMethod(path,req.method);
   if(path==='/api/public')return json({app_slug:env.GITHUB_APP_SLUG||null,installation_url:env.GITHUB_APP_SLUG?'https://github.com/apps/'+env.GITHUB_APP_SLUG+'/installations/new':null,source_url:'https://github.com/wauul/PatchGoblin',support_url:env.SUPPORT_URL||'https://github.com/wauul/PatchGoblin/issues',operator:env.OPERATOR_NAME||'Independent project operated by the GitHub account wauul',legal_contact:env.LEGAL_CONTACT||null,limits});
   if(path==='/api/github/webhook'&&req.method==='POST'){
    if(!env.GITHUB_WEBHOOK_SECRET)throw new ProductError(503,'Webhook integration is not configured.');
-   const raw=await req.text();if(raw.length>2_000_000)throw new ProductError(413,'Webhook is too large.');
+   if(!/^sha256=[a-f0-9]{64}$/.test(req.headers.get('x-hub-signature-256')||''))throw new ProductError(401,'Invalid webhook signature.');
+   const raw=await limitedText(req,2_000_000);
    if(!validSignature(raw,req.headers.get('x-hub-signature-256'),env.GITHUB_WEBHOOK_SECRET))throw new ProductError(401,'Invalid webhook signature.');
+   await guard.rate('ip:'+clientIp(req,env),'webhook',120);
    const id=req.headers.get('x-github-delivery')||'',event=req.headers.get('x-github-event')||'';
    if(!/^[a-zA-Z0-9-]{16,100}$/.test(id))throw new ProductError(400,'Missing delivery identity.');
    if(!['installation','installation_repositories','workflow_run','push','pull_request','check_run','github_app_authorization','ping'].includes(event))return json({accepted:true,ignored:true},202);
    let data;try{data=JSON.parse(raw);}catch{throw new ProductError(400,'Webhook must contain JSON.');}
+   if(!data||typeof data!=='object'||Array.isArray(data))throw new ProductError(400,'Invalid webhook payload.');
+   if(event!=='ping'&&event!=='github_app_authorization'&&(!Number.isSafeInteger(data.installation?.id)||data.installation.id<1))throw new ProductError(400,'Invalid installation identity.');
+   if(['push','workflow_run','pull_request','check_run'].includes(event)&&(!Number.isSafeInteger(data.repository?.id)||data.repository.id<1))throw new ProductError(400,'Invalid repository identity.');
    // Retain only automation metadata; never persist full pushed source or CI logs here.
    const payload={action:data.action,installation:data.installation&&{id:data.installation.id,account:data.installation.account},repository:data.repository&&{id:data.repository.id,full_name:data.repository.full_name,default_branch:data.repository.default_branch},sender:data.sender&&{id:data.sender.id,login:data.sender.login},ref:data.ref,before:data.before,after:data.after,deleted:data.deleted,
     workflow_run:data.workflow_run&&{id:data.workflow_run.id,conclusion:data.workflow_run.conclusion,status:data.workflow_run.status,head_sha:data.workflow_run.head_sha,head_branch:data.workflow_run.head_branch,event:data.workflow_run.event},
     pull_request:data.pull_request&&{number:data.pull_request.number,head:{sha:data.pull_request.head.sha,ref:data.pull_request.head.ref,repo:{full_name:data.pull_request.head.repo?.full_name}},base:{ref:data.pull_request.base.ref},user:{login:data.pull_request.user.login}},
     check_run:data.check_run&&{id:data.check_run.id,head_sha:data.check_run.head_sha,external_id:data.check_run.external_id,app:{id:data.check_run.app?.id}},requested_action:data.requested_action};
-   const inserted=await span('webhook',()=>sql('INSERT INTO pg_deliveries(id,event,installation_id,repository_id,payload) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id',[id,event,data.installation?.id||null,data.repository?.id||null,JSON.stringify({...payload,telemetry:durableTrace()})]));
+   const inserted=await span('webhook',()=>sql('SELECT pg_accept_delivery($1,$2,$3,$4,$5::jsonb) AS inserted',[id,event,data.installation?.id||null,data.repository?.id||null,JSON.stringify({...payload,telemetry:durableTrace()})]));
+   if(typeof inserted[0]?.inserted!=='boolean')throw new ProductError(503,'Webhook protection is unavailable.',true);
    // Repeated delivery also wakes pending durable work after an interrupted cold start.
    try{const response=await span('wake',()=>fetcher(env.WORKER_URL+'/wake',{method:'POST',headers:{Authorization:'Bearer '+env.WORKER_WAKE_TOKEN},signal:AbortSignal.timeout(2000)}));if(!response.ok)captureFault(new Error('Worker wake failed'),'wake');}catch(error){captureFault(error,'wake');}
-   return json({accepted:true,duplicate:inserted.length===0},202);
+   return json({accepted:true,duplicate:!inserted[0].inserted},202);
   }
   if(path==='/api/retention'){
    if(!env.CRON_SECRET||req.headers.get('authorization')!=='Bearer '+env.CRON_SECRET)throw new ProductError(401,'Unauthorized');
    const checkIn=retentionCheckIn('in_progress');
-   try{await span('retention',()=>sql('SELECT pg_retention()'));await product.wake();if(checkIn)retentionCheckIn('ok',checkIn);return json({ok:true});}
+   try{await span('retention',()=>sql('SELECT pg_retention()'));const alerts=await notifyBudgets();await product.wake();if(checkIn)retentionCheckIn('ok',checkIn);return json({ok:true,budget_alerts:alerts});}
    catch(error){if(checkIn)retentionCheckIn('error',checkIn);throw error;}
   }
-  if(path==='/api/auth/login'&&req.method==='GET'){
+  if(path==='/api/auth/login'){
    if(!env.GITHUB_OAUTH_CLIENT_ID)throw new ProductError(503,'GitHub login is not configured.');
+   const ip=clientIp(req,env);await guard.rate('ip:'+ip,'login',10,600);await guard.rate('global','oauth',200,600);
+   if(req.method==='GET')return loginChallenge(env,localReturn(url.searchParams.get('return_to')));
+   checkOrigin();
+   if(!req.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded'))throw new ProductError(400,'Use the sign-in form.');
+   const form=new URLSearchParams(await limitedText(req,4096));
+   await verifyChallenge(form.get('cf-turnstile-response'),env,fetcher,ip);
    const state=random(),browser=random(),verifier=random();
-   await sql("INSERT INTO pg_oauth_states(state_hash,browser_hash,verifier,return_to,purpose,expires_at) VALUES($1,$2,$3,$4,'identity',now()+interval '10 minutes')",[hash(state),hash(browser),verifier,localReturn(url.searchParams.get('return_to'))]);
+   await sql("INSERT INTO pg_oauth_states(state_hash,browser_hash,verifier,return_to,purpose,expires_at) VALUES($1,$2,$3,$4,'identity',now()+interval '10 minutes')",[hash(state),hash(browser),verifier,localReturn(form.get('return_to'))]);
    const target=new URL('https://github.com/login/oauth/authorize');target.searchParams.set('client_id',env.GITHUB_OAUTH_CLIENT_ID);target.searchParams.set('scope','');target.searchParams.set('redirect_uri',origin+'/api/auth/callback');target.searchParams.set('state',state);target.searchParams.set('code_challenge',Buffer.from(hash(verifier),'hex').toString('base64url'));target.searchParams.set('code_challenge_method','S256');
    return redirect(target.toString(),cookie('__Host-pg-oauth',browser,600));
   }
   if(path==='/api/auth/callback'&&req.method==='GET'){
+   await guard.rate('ip:'+clientIp(req,env),'callback',20,600);
    const state=url.searchParams.get('state')||'',browser=cookies(req)['__Host-pg-oauth']||'';
    const row=(await sql('DELETE FROM pg_oauth_states WHERE state_hash=$1 AND browser_hash=$2 AND expires_at>now() RETURNING *',[hash(state),hash(browser)]))[0];
    if(!row||!['identity','installation'].includes(row.purpose)||!url.searchParams.get('code'))return redirect('/?auth_error='+encodeURIComponent('GitHub sign-in was declined or expired. Please try again.'),cookie('__Host-pg-oauth','',0));
@@ -72,13 +89,24 @@ async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fe
    if(user.login==='wauul'&&env.LEGACY_GITHUB_ACCOUNT_ID===String(user.id))await sql("UPDATE patchgoblin_jobs SET account_id=$1,owner_key=$2,request=request||jsonb_build_object('owner',$2::text) WHERE owner_key=$3",[user.id,'github:'+user.id,hash('private-owner|wauul/PatchGoblin').slice(0,24)]);
    const response=redirect(row.return_to);response.headers.append('Set-Cookie',cookie('__Host-pg-session',session,604800));response.headers.append('Set-Cookie',cookie('__Host-pg-oauth','',0));return response;
   }
+  if(cookies(req)['__Host-pg-session'])await guard.rate('ip:'+clientIp(req,env),'authenticated',120);
   const account=await product.session(req);
   if(path==='/api/bootstrap'&&!account)return json({connected:false,account:null,repositories:[],limits});
   if(path==='/api/github/setup'&&!account)return redirect('/api/auth/login?return_to=/onboarding');
   if(!account)throw new ProductError(401,'Sign in with GitHub to continue.');
   if(req.method!=='GET'&&req.method!=='HEAD'){if(req.headers.get('x-csrf-token')!==account.csrf)throw new ProductError(403,'Session verification failed. Refresh the page and try again.');}
+  if(req.method==='POST')checkOrigin();
+  await guard.rate('account:'+account.id,'authenticated',120);
+  if(['/api/github/sync','/api/github/connect','/api/account/export'].includes(path))await guard.rate('account:'+account.id,path,path==='/api/account/export'?100:3,600);
+  const accessibleJobs=async(rows:any[])=>{
+   const permissions=new Map<string,boolean>();
+   for(const row of rows){if(!row.repository_id)continue;const repo=row.request?.repo;
+    if(!permissions.has(repo)){try{await product.authorize(account,repo);permissions.set(repo,true);}catch(error){if(error instanceof ProductError&&[401,403,404].includes(error.status))permissions.set(repo,false);else throw error;}}
+   }
+   return rows.filter(row=>!row.repository_id||permissions.get(row.request?.repo)===true);
+  };
   if(path==='/api/bootstrap'){
-   const repositories=await product.repositories(account.id),usage=(await sql("SELECT count(*) FILTER(WHERE created_at>now()-interval '1 day')::int AS daily,count(*) FILTER(WHERE created_at>now()-interval '1 hour')::int AS hourly,COALESCE(sum((state->'metrics'->>'model_tokens')::bigint),0)::bigint AS model_tokens FROM patchgoblin_jobs WHERE account_id=$1",[account.id]))[0];
+   const repositories=await product.visibleRepositories(account),usage=(await sql("SELECT count(*) FILTER(WHERE created_at>now()-interval '1 day')::int AS daily,count(*) FILTER(WHERE created_at>now()-interval '1 hour')::int AS hourly,COALESCE(sum(model_tokens),0)::bigint AS reserved_model_tokens,(SELECT COALESCE(sum((state->'metrics'->>'model_tokens')::bigint),0)::bigint FROM patchgoblin_jobs WHERE account_id=$1) AS model_tokens FROM pg_usage_events WHERE subject=pg_subject($1) AND kind='job'",[account.id]))[0];
    return json({connected:true,repository_authorized:!!account.credentials,login:account.login,account:{id:Number(account.id),login:account.login,avatar_url:account.avatar_url,onboarding_at:account.onboarding_at},csrf:account.csrf,repositories,usage,worker_submission:true,limits});
   }
   if(path==='/api/extension/status'){
@@ -98,12 +126,13 @@ async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fe
    const target=new URL('https://github.com/login/oauth/authorize');target.searchParams.set('client_id',env.GITHUB_CLIENT_ID);target.searchParams.set('redirect_uri',origin+'/api/auth/callback');target.searchParams.set('state',state);target.searchParams.set('login',account.login);target.searchParams.set('code_challenge',Buffer.from(hash(verifier),'hex').toString('base64url'));target.searchParams.set('code_challenge_method','S256');
    return redirect(target.toString(),cookie('__Host-pg-oauth',browser,600));
   }
-  if(path==='/api/github/setup'){if(!account.credentials)return redirect('/onboarding');await product.sync(account);return redirect('/onboarding');}
+  if(path==='/api/github/setup')return redirect('/onboarding');
   if(path==='/api/github/sync'&&req.method==='POST'){await readBody();return json({repositories:await product.sync(account)});}
   if(path==='/api/account/onboarding'&&req.method==='POST'){await readBody();await sql('UPDATE pg_accounts SET onboarding_at=now() WHERE id=$1',[account.id]);return json({ok:true});}
   if(path==='/api/account/export'){
-   const jobs=await sql('SELECT id,request,state,status,created_at FROM patchgoblin_jobs WHERE account_id=$1 ORDER BY id',[account.id]);const repositories=await product.repositories(account.id);
-   return json({exported_at:new Date().toISOString(),account:{id:account.id,login:account.login,created_at:account.created_at},repositories,jobs},200,{'Content-Disposition':'attachment; filename="patchgoblin-data.json"'});
+   const after=Number(url.searchParams.get('after')||0);if(!Number.isSafeInteger(after)||after<0)throw new ProductError(400,'Invalid export cursor.');
+   const rows=await sql('SELECT id,repository_id,request,state,status,created_at FROM patchgoblin_jobs WHERE account_id=$1 AND id>$2 ORDER BY id LIMIT 30',[account.id,after]);const jobs=await accessibleJobs(rows),repositories=await product.visibleRepositories(account);
+   return json({exported_at:new Date().toISOString(),account:{id:account.id,login:account.login,created_at:account.created_at},repositories,jobs:jobs.map(jobView),next_after:rows.length===30?Number(rows.at(-1).id):null},200,{'Content-Disposition':'attachment; filename="patchgoblin-data.json"'});
   }
   if(path==='/api/account/delete'&&req.method==='POST'){
    const body=await readBody();if(body.confirm!==account.login)throw new ProductError(400,'Type your GitHub login to confirm deletion.');
@@ -116,6 +145,7 @@ async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fe
    if(![7,30,90].includes(body.retention_days)||!Number.isInteger(body.daily_limit)||body.daily_limit<1||body.daily_limit>5)throw new ProductError(400,'Invalid usage or retention limit.');
    await sql('UPDATE pg_repositories SET enabled=$2,paused=$3,auto_repair=$4,auto_builder=$5,auto_maintenance=$6,daily_limit=$7,retention_days=$8,controller_id=$9,updated_at=now() WHERE id=$1',[row.id,body.enabled,body.paused,body.auto_repair,body.auto_builder,body.auto_maintenance,body.daily_limit,body.retention_days,account.id]);
    if(!body.enabled||body.paused)await sql("UPDATE patchgoblin_jobs SET cancelled_at=now(),status='cancelled',updated_at=now() WHERE repository_id=$1 AND status NOT IN ('submitted','verified','unsupported','failed','cancelled')",[row.id]);
+   await guard.audit(account.id,'settings',Number(row.id));
    return json({ok:true});
   }
   if(path==='/api/repositories/health'){
@@ -129,29 +159,30 @@ async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fe
    return json({runs:data.workflow_runs.filter((r:any)=>!r.head_branch?.startsWith('codex/patchgoblin-')).map((r:any)=>({id:r.id,name:r.name,branch:r.head_branch,sha:r.head_sha,url:r.html_url,event:r.event}))});
   }
   if(path==='/api/jobs'&&req.method==='GET'){
-   await sql('SELECT patchgoblin_expire()');const rows=await sql('SELECT * FROM patchgoblin_jobs WHERE account_id=$1 ORDER BY created_at DESC LIMIT 200',[account.id]);return json({jobs:rows.map(jobView)});
+   await sql('SELECT patchgoblin_expire()');const rows=await sql('SELECT * FROM patchgoblin_jobs WHERE account_id=$1 ORDER BY created_at DESC LIMIT 200',[account.id]);return json({jobs:(await accessibleJobs(rows)).map(jobView)});
   }
   if(path==='/api/jobs'&&req.method==='POST'){
    const body=await readBody();const repo=repositoryName(body.repo);if(!['repair','builder','maintenance'].includes(body.mode)||typeof body.key!=='string'||!/^[\w-]{16,100}$/.test(body.key))throw new ProductError(400,'Choose a supported mode and request identity.');
+   await guard.feature('jobs');await guard.rate('account:'+account.id,'enqueue',8,3600);
    const {row,token}=await product.authorize(account,repo,true);if(!row.enabled||row.paused)throw new ProductError(409,'This repository is disabled or paused.');
    let ref=body.ref||row.default_branch,sha;
    if(body.mode==='repair'){if(!Number.isSafeInteger(body.run_id)||body.run_id<1)throw new ProductError(400,'Choose a failed workflow run.');const run=await product.github(`/repos/${repo}/actions/runs/${body.run_id}`,token);if(run.conclusion!=='failure'||run.status!=='completed')throw new ProductError(400,'Choose a completed failed run.');if(run.event==='pull_request'&&run.head_repository?.full_name!==repo)throw new ProductError(422,'Fork failure repair needs a maintainer branch; maintenance can review the PR separately.');ref=run.head_branch;sha=run.head_sha;}
    if(typeof ref!=='string'||ref.length>200||ref.startsWith('codex/patchgoblin-')||/[\s~^:?*\[\\]/.test(ref))throw new ProductError(400,'Choose a valid contributor or base branch.');
    const request={repo,mode:body.mode,run_id:body.mode==='repair'?body.run_id:null,ref,key:body.key,sha,source:'web',owner:'github:'+account.id,telemetry:durableTrace()};
-   const rowJob=(await sql('SELECT * FROM pg_enqueue($1,$2,$3,$4::jsonb)',[account.id,row.id,body.key,JSON.stringify(request)]))[0];await product.wake();return json(jobView(rowJob),202);
+   const rowJob=(await sql('SELECT * FROM pg_enqueue($1,$2,$3,$4::jsonb)',[account.id,row.id,body.key,JSON.stringify(request)]))[0];await notifyBudgets();await product.wake();return json(jobView(rowJob),202);
   }
   const match=path.match(/^\/api\/jobs\/(\d+)(?:\/(cancel|sync|submit))?$/);
   if(match){
    await sql('SELECT patchgoblin_expire()');const row=(await sql('SELECT * FROM patchgoblin_jobs WHERE id=$1 AND account_id=$2',[Number(match[1]),account.id]))[0];if(!row)throw new ProductError(404,'Job not found.');
    // Historical public operator evidence is owner scoped; every installed job rechecks current GitHub access.
-   let auth;if(row.repository_id)auth=await product.authorize(account,row.request.repo);
+   let auth;if(row.repository_id)auth=await product.authorize(account,row.request.repo,match[2]==='submit');
    if(!match[2]&&req.method==='GET'){if(row.status==='queued')await product.wake();return json(jobView(row));}
    if(req.method!=='POST')throw new ProductError(405,'Use POST for this action.');await readBody();
-   if(match[2]==='cancel'){if(!terminal.has(row.status))await sql("UPDATE patchgoblin_jobs SET cancelled_at=now(),status='cancelled',updated_at=now() WHERE id=$1 AND account_id=$2",[row.id,account.id]);return json({...jobView(row),status:terminal.has(row.status)?row.status:'cancelled'});}
-   if(match[2]==='submit'){if(row.status!=='verified'||row.cancelled_at)throw new ProductError(409,'Only verified, active jobs can retry submission.');await sql("UPDATE patchgoblin_jobs SET request=request||'{\"retry_submission\":true}',status='queued',state=state||'{\"status\":\"verified\"}' WHERE id=$1 AND account_id=$2",[row.id,account.id]);await product.wake();return json({...jobView(row),status:'queued'});}
+   if(match[2]==='cancel'){if(!terminal.has(row.status)){await sql("UPDATE patchgoblin_jobs SET cancelled_at=now(),status='cancelled',updated_at=now() WHERE id=$1 AND account_id=$2",[row.id,account.id]);await guard.audit(account.id,'cancel',Number(row.id));}return json({...jobView(row),status:terminal.has(row.status)?row.status:'cancelled'});}
+   if(match[2]==='submit'){if(row.status!=='verified'||row.cancelled_at)throw new ProductError(409,'Only verified, active jobs can retry submission.');await guard.feature('submission');await sql('SELECT pg_retry_submission($1,$2)',[account.id,row.id]);await product.wake();return json({...jobView(row),status:'queued'});}
    if(match[2]==='sync'&&row.state.pr_sha&&auth){const runs=await product.github(`/repos/${row.request.repo}/actions/runs?head_sha=${row.state.pr_sha}&per_page=20`,auth.token);const remote=runs.workflow_runs.map((r:any)=>({id:r.id,name:r.name,status:r.status,conclusion:r.conclusion,url:r.html_url}));await sql("UPDATE patchgoblin_jobs SET state=state||jsonb_build_object('remote_ci',$2::jsonb),updated_at=now() WHERE id=$1",[row.id,JSON.stringify(remote)]);return json({...jobView(row),remote_ci:remote});}
    return json(jobView(row));
   }
   throw new ProductError(404,'Endpoint not found.');
- }catch(error){const message=(error as Error).message;if(message.split('\n')[0]==='PG_RATE_LIMIT')return json({error:'Usage limit reached. Check repository settings and try again tomorrow.'},429);if(message.split('\n')[0]==='PG_ACTIVE_JOB')return json({error:'You already have an active job. Wait for it or cancel it first.'},409);if(message.split('\n')[0]==='PG_REPO_DISABLED')return json({error:'Repository automation is unavailable or paused.'},409);if(error instanceof ProductError&&error.status<500)return json({error:error.message},error.status);const eventId=captureFault(error,'request');if(error instanceof ProductError)return json({error:error.message,...(eventId?{event_id:eventId}:{})},error.status,eventId?{'X-Sentry-Event-ID':eventId}:{});console.error(JSON.stringify({level:'error',route:route(req.url),type:(error as Error).name}));return json({error:'The request could not be completed. Retry or contact support with the request ID.',...(eventId?{event_id:eventId}:{})},500,eventId?{'X-Sentry-Event-ID':eventId}:{});}
+ }catch(error){const message=(error as Error).message;if(message.split('\n')[0]==='PG_FEATURE_PAUSED')return json({error:'This operation is temporarily paused.'},503);if(message.split('\n')[0]==='PG_RATE_LIMIT')return json({error:'Usage limit reached. Check repository settings and try again tomorrow.'},429);if(message.split('\n')[0]==='PG_ACTIVE_JOB')return json({error:'You already have an active job. Wait for it or cancel it first.'},409);if(message.split('\n')[0]==='PG_REPO_DISABLED')return json({error:'Repository automation is unavailable or paused.'},409);if(error instanceof ProductError&&error.status<500)return json({error:error.message},error.status);const eventId=captureFault(error,'request');if(error instanceof ProductError)return json({error:error.message,...(eventId?{event_id:eventId}:{})},error.status,eventId?{'X-Sentry-Event-ID':eventId}:{});console.error(JSON.stringify({level:'error',route:route(req.url),type:(error as Error).name}));return json({error:'The request could not be completed. Retry or contact support with the request ID.',...(eventId?{event_id:eventId}:{})},500,eventId?{'X-Sentry-Event-ID':eventId}:{});}
 }

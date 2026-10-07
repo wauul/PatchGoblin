@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
 import * as Sentry from '@sentry/node';
 import {configuration,metadata,route,sanitizeEvent,sanitizeSpan,sanitizeLog,sanitizeReplay,traceMetadata,dataCollection} from '../telemetry/privacy.ts';
-import {initTelemetry,captureFault,expectedError,requestScope,durableTrace,flushTelemetry} from '../server/telemetry.ts';
+import {initTelemetry,captureFault,expectedError,requestScope,durableTrace,flushTelemetry,span} from '../server/telemetry.ts';
 import {ProductError} from '../server/platform-core.ts';
 import {handleProduct} from '../server/platform.ts';
 
@@ -38,6 +39,13 @@ test('trace persistence bounds input and rejects unvalidated baggage',()=>{
  for(const trace of ['0'.repeat(32)+'-'+'b'.repeat(16),parent+'\nsecret',secret])assert.deepEqual(traceMetadata({'sentry-trace':trace}),{});
  assert.equal(traceMetadata({'sentry-trace':parent,baggage:'a'.repeat(1025)}).baggage,undefined);
 });
+test('W3C context rejects zero IDs, unsupported versions and conflicting parents',()=>{
+ const parent='00-'+'a'.repeat(32)+'-'+'b'.repeat(16)+'-01';
+ assert.equal(traceMetadata({traceparent:parent})['sentry-trace'],'a'.repeat(32)+'-'+'b'.repeat(16)+'-1');
+ for(const value of [parent.replace('00-','ff-'),parent+'-secret',parent.replace('a'.repeat(32),'0'.repeat(32)),parent.replace('b'.repeat(16),'0'.repeat(16))])assert.deepEqual(traceMetadata({traceparent:value}),{});
+ assert.deepEqual(traceMetadata({traceparent:parent,'sentry-trace':'c'.repeat(32)+'-'+'d'.repeat(16)+'-1'}),{});
+ assert.equal(traceMetadata({traceparent:parent,baggage:'secret='+secret,tracestate:secret}).tracestate,undefined);
+});
 test('expected policy failures are separated narrowly from application defects',()=>{
  for(const e of [new ProductError(401,secret),new ProductError(429,secret),new ProductError(503,'Renewal',true),new Error('PG_ACTIVE_JOB')])assert.equal(expectedError(e),true);
  for(const e of [new ProductError(502,secret),new Error('Unexpected crash mentions PG_ACTIVE_JOB'),new TypeError(secret)])assert.equal(expectedError(e),false);
@@ -46,9 +54,20 @@ test('real SDK transport: caught API faults, deduplication, concurrent isolation
  const envelopes:any[]=[];
  initTelemetry({SENTRY_DSN:dsn,SENTRY_ENVIRONMENT:'verification',SENTRY_VERIFY:'true',SENTRY_TRACES_SAMPLE_RATE:'1'}, {transport:()=>({send:async envelope=>{envelopes.push(envelope);return {statusCode:200};},flush:async()=>true})});
  try {
+  const w3c='00-'+'e'.repeat(32)+'-'+'f'.repeat(16)+'-01';
+  const carrier=await requestScope(new Request('https://patchgoblin.vercel.app/api/jobs',{headers:{traceparent:w3c}}),()=>span('persistence',async()=>durableTrace()));
+  assert.ok(carrier.traceparent.startsWith('00-'+'e'.repeat(32)));
+  const child=spawnSync('uv',['run','--frozen','python','tests/fixtures/trace_worker.py'],{input:JSON.stringify(carrier),encoding:'utf8',env:{...process.env,PYTHONPATH:'.'},timeout:30000});
+  assert.equal(child.status,0,child.stderr);
+  const continued=JSON.parse(child.stdout);
+  assert.equal(continued.trace_id,'e'.repeat(32));
+  assert.equal(continued.parent_span_id,carrier.traceparent.split('-')[2]);
+  assert.equal(continued.decision_trace_id,continued.trace_id);
+  assert.equal(continued.decision_parent_span_id,continued.stage_span_id);
+  assert.equal(continued.canary_removed,true);
   const parentA='a'.repeat(32)+'-'+'b'.repeat(16)+'-1',parentB='c'.repeat(32)+'-'+'d'.repeat(16)+'-1';
   const traces=await Promise.all([parentA,parentB].map(async parent=>requestScope(new Request('https://patchgoblin.vercel.app/api/jobs',{headers:{'sentry-trace':parent}}),async requestId=>{
-   await new Promise(r=>setTimeout(r,parent===parentA?10:1));
+   await span('database',async()=>new Promise<void>(r=>setTimeout(r,parent===parentA?10:1)));
    const fault=new TypeError(secret);const first=captureFault(fault,'job');assert.equal(captureFault(fault,'job'),first);
    assert.equal(captureFault(new ProductError(401,secret),'request'),undefined);
    return {requestId,trace:durableTrace()};
@@ -56,15 +75,15 @@ test('real SDK transport: caught API faults, deduplication, concurrent isolation
   assert.equal(traces[0].trace['sentry-trace'].slice(0,32),'a'.repeat(32));assert.equal(traces[1].trace['sentry-trace'].slice(0,32),'c'.repeat(32));
   const stored=new Map<string,any>();let wakes=0;
   const raw=JSON.stringify({action:'completed',installation:{id:1},repository:{id:2,full_name:secret},workflow_run:{id:42,status:'completed',conclusion:'failure',head_sha:'a'.repeat(40),head_branch:'main'}});
-  const webhookEnv={GITHUB_WEBHOOK_SECRET:'fixture',WORKER_URL:'https://worker.invalid',WORKER_WAKE_TOKEN:'fixture'};
-  const headers={'x-hub-signature-256':'sha256='+createHmac('sha256','fixture').update(raw).digest('hex'),'x-github-event':'workflow_run','x-github-delivery':'fixture-delivery'};
-  const query=async(sql:string,args:any[]=[])=>{assert.ok(sql.includes('ON CONFLICT(id) DO NOTHING'));if(stored.has(args[0]))return [];stored.set(args[0],JSON.parse(args[4]));return [{id:args[0]}];};
+  const webhookEnv={GITHUB_WEBHOOK_SECRET:'fixture',WORKER_URL:'https://worker.invalid',WORKER_WAKE_TOKEN:'fixture',VERCEL:'1',TOKEN_ENCRYPTION_KEY:'12'.repeat(32)};
+  const headers={'x-hub-signature-256':'sha256='+createHmac('sha256','fixture').update(raw).digest('hex'),'x-github-event':'workflow_run','x-github-delivery':'fixture-delivery','x-vercel-forwarded-for':'203.0.113.8'};
+  const query=async(sql:string,args:any[]=[])=>{if(sql.includes('pg_rate_limit'))return [{allowed:true}];assert.ok(sql.includes('pg_accept_delivery'));if(stored.has(args[0]))return [{inserted:false}];stored.set(args[0],JSON.parse(args[4]));return [{inserted:true}];};
   for(const parent of [parentA,parentB])await handleProduct(new Request('https://patchgoblin.vercel.app/api/github/webhook',{method:'POST',body:raw,headers:{...headers,'sentry-trace':parent,baggage:'secret='+secret}}),webhookEnv,async()=>{wakes++;return new Response(null,{status:202});},query);
   // Duplicate delivery still wakes the worker, preserving the existing retry behavior.
   assert.equal(wakes,2);assert.equal(stored.size,1);
   assert.equal(stored.get('fixture-delivery').telemetry['sentry-trace'].slice(0,32),'a'.repeat(32));
   assert.ok(!JSON.stringify(stored.get('fixture-delivery').telemetry).includes(secret));
-  const r=await handleProduct(new Request('https://patchgoblin.vercel.app/api/bootstrap',{headers:{cookie:'__Host-pg-session=opaque'}}),{},fetch,async()=>{throw new Error(secret);});
+  const r=await handleProduct(new Request('https://patchgoblin.vercel.app/api/bootstrap',{headers:{cookie:'__Host-pg-session=opaque','x-vercel-forwarded-for':'203.0.113.8'}}),{VERCEL:'1',TOKEN_ENCRYPTION_KEY:'12'.repeat(32)},fetch,async()=>{throw new Error(secret);});
   assert.equal(r.status,500);assert.ok(r.headers.get('X-Request-ID'));assert.ok(r.headers.get('X-Sentry-Event-ID'));
   await flushTelemetry();
   const events=envelopes.flatMap(e=>e[1]).filter((item:any)=>item[0].type==='event').map((item:any)=>item[1]);
@@ -73,15 +92,16 @@ test('real SDK transport: caught API faults, deduplication, concurrent isolation
   assert.ok(events.some((e:any)=>e.contexts.trace.trace_id==='a'.repeat(32)));
   const transactions=envelopes.flatMap(e=>e[1]).filter((item:any)=>item[0].type==='transaction').map((item:any)=>item[1]);
   assert.ok(transactions.length>0);
+  assert.ok(transactions.some((tx:any)=>tx.contexts.trace.trace_id==='e'.repeat(32) && tx.spans.some((child:any)=>child.op==='persistence' && child.span_id===carrier.traceparent.split('-')[2])));
   assert.ok(transactions.every((item:any)=>item.environment==='verification' && item.tags.service==='api'));
   assert.ok(transactions.every((item:any)=>item.contexts.trace.op==='request'));
-  assert.ok(transactions.some((item:any)=>item.transaction==='/api/github/webhook' && item.spans.some((span:any)=>span.op==='wake')));
+  assert.ok(transactions.some((item:any)=>item.transaction==='/api/github/webhook' && item.spans.some((span:any)=>span.op==='wake')),JSON.stringify(transactions.map((tx:any)=>({name:tx.transaction,spans:tx.spans}))));
   const countCheckIns=()=>envelopes.flatMap(e=>e[1]).filter((item:any)=>item[0].type==='check_in').map((item:any)=>item[1]);
   const cronEnv={CRON_SECRET:'controlled-fixture'};
   const denied=await handleProduct(new Request('https://patchgoblin.vercel.app/api/retention'),cronEnv,fetch,async()=>{throw Error('Unauthorized cron must not access SQL');});
   assert.equal(denied.status,401);assert.equal(countCheckIns().length,0);
   const cron=()=>new Request('https://patchgoblin.vercel.app/api/retention',{headers:{authorization:'Bearer controlled-fixture'}});
-  const completed=await handleProduct(cron(),cronEnv,fetch,async sql=>{assert.equal(sql,'SELECT pg_retention()');return [];});
+  const completed=await handleProduct(cron(),cronEnv,fetch,async sql=>{assert.ok(['SELECT pg_retention()','SELECT * FROM pg_budget_alerts()'].includes(sql));return [];});
   assert.equal(completed.status,200);
   const failed=await handleProduct(cron(),cronEnv,fetch,async()=>{throw new TypeError(secret);});
   assert.equal(failed.status,500);

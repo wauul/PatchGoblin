@@ -64,6 +64,8 @@ class InstallationGitHub(GitHub):
 
     @telemetry.instrument('github')
     def request(self, method, path, **kwargs):
+        if method.upper() not in {'GET', 'HEAD'} and getattr(self, 'write_guard', None):
+            self.write_guard()
         if time.monotonic() > self.expires:
             self.refresh()
         prefix = "/repos/" + self.repo

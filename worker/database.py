@@ -10,7 +10,7 @@ from worker.security import redact_data
 
 
 def connect():
-    return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=15)
+    return psycopg.connect(os.environ["DATABASE_URL"],autocommit=True,row_factory=dict_row,connect_timeout=15,options='-c statement_timeout=10000 -c lock_timeout=5000')
 
 
 @telemetry.instrument('database')
@@ -42,7 +42,7 @@ class DatabaseStore:
         if force or time.monotonic()-self.last_check>2:
             self.last_check=time.monotonic()
             with connect() as db:
-                row=db.execute("SELECT j.cancelled_at,j.lease_token,j.lease_expires_at>now() AS valid,CASE WHEN j.repository_id IS NULL THEN true ELSE COALESCE(r.active AND r.enabled AND NOT r.paused AND i.active,false) END AS repo_available FROM patchgoblin_jobs j LEFT JOIN pg_repositories r ON r.id=j.repository_id LEFT JOIN pg_installations i ON i.id=r.installation_id WHERE j.id=%s",(self.id,)).fetchone()
+                row=db.execute("SELECT j.cancelled_at,j.lease_token,j.lease_expires_at>now() AS valid,CASE WHEN j.repository_id IS NULL THEN true ELSE COALESCE(r.active AND r.enabled AND NOT r.paused AND i.active AND pg_feature_allowed('jobs'),false) END AS repo_available FROM patchgoblin_jobs j LEFT JOIN pg_repositories r ON r.id=j.repository_id LEFT JOIN pg_installations i ON i.id=r.installation_id WHERE j.id=%s",(self.id,)).fetchone()
             self.is_cancelled=not row or bool(row["cancelled_at"]) or row["lease_token"]!=self.lease or not row["valid"] or not row['repo_available']
         return self.is_cancelled
 

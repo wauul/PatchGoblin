@@ -45,6 +45,11 @@ REPO = {
 }
 
 
+@pytest.fixture(autouse=True)
+def healthy_controls(monkeypatch):
+    monkeypatch.setattr(webhooks, 'require_feature', lambda feature: None)
+
+
 def test_agent_workflow_receipt_never_enqueues_a_job(monkeypatch):
     fake_database(monkeypatch, REPO)
     receipts = []

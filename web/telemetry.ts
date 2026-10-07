@@ -23,7 +23,7 @@ export const replayOptions = {
 };
 if (config.enabled) {
   try {
-    Sentry.init({...config,dataCollection,maxBreadcrumbs:20,
+    Sentry.init({...config,dataCollection,maxBreadcrumbs:20,propagateTraceparent:true,
       integrations:defaults=>[...defaults.filter(x=>!['Breadcrumbs','HttpContext','BrowserSession','BrowserApiErrors'].includes(x.name)),Sentry.browserTracingIntegration({beforeStartSpan:options=>({...options,name:route(location.pathname),attributes:{route:route(location.pathname)}})})],
       tracePropagationTargets:[/^\/api(?:\/|$)/,new RegExp('^'+location.origin.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'/api(?:/|$)')],
       replaysSessionSampleRate:0,replaysOnErrorSampleRate:0,

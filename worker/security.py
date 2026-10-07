@@ -23,6 +23,14 @@ def redact_data(value):
     return value
 
 
+def public_prose(text, limit=3000):
+    """Generated GitHub prose must not create links, images, HTML or mentions."""
+    text = redact(str(text))[:limit]
+    text = re.sub(r'https?://[^\s<>]+', '[link removed]', text, flags=re.I)
+    text = text.replace('@', '@\u200b')
+    return text.replace('<', '&lt;').replace('>', '&gt;').replace('[', '\\[').replace(']', '\\]').replace('`', '\\`')
+
+
 def filter_logs(text: str, limit: int = 10000) -> str:
     lines = re.sub(r"\x1b\[[0-9;]*m", "", redact(text)).splitlines()
     selected = set()

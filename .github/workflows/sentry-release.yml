@@ -9,7 +9,6 @@ jobs:
     timeout-minutes: 10
     environment: production
     env:
-      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_ORG: ${{ vars.SENTRY_ORG }}
       SENTRY_PROJECT_FRONTEND: patchgoblin-frontend
       SENTRY_PROJECT_API: patchgoblin-api
@@ -17,7 +16,6 @@ jobs:
       SENTRY_RELEASE: patchgoblin@${{ github.sha }}
       SENTRY_ENVIRONMENT: production
       SENTRY_REQUIRE_UPLOAD: 'true'
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
@@ -36,11 +34,22 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.8.22'
+      - run: uv sync --frozen --group dev
       - run: npm test
       - run: node scripts/prepare-sentry-ci-build.mjs
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - run: npx vercel@60.1.3 build --prod --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - run: node scripts/verify-vercel-runtime.mjs
       - run: node scripts/sentry-api-maps.mjs
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - run: node scripts/check-sentry-artifacts.mjs
       # No artifact upload action: source maps/token must not become CI downloads.
       # A reviewed deployment uses this exact output via vercel deploy --prebuilt.

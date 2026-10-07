@@ -1,7 +1,8 @@
 import * as Sentry from '@sentry/node';
+import {trace, SpanStatusCode} from '@opentelemetry/api';
 import {randomUUID} from 'node:crypto';
 import {volume} from '../telemetry/volume.js';
-import {configuration,dataCollection,metadata,route,sanitizeEvent,sanitizeSpan,sanitizeBreadcrumb,sanitizeLog,traceMetadata} from '../telemetry/privacy.js';
+import {configuration,dataCollection,metadata,route,sanitizeEvent,sanitizeSpan,sanitizeBreadcrumb,sanitizeLog,traceMetadata,w3cTrace} from '../telemetry/privacy.js';
 
 let initialized = false;
 const captured = new WeakMap<object,string>();
@@ -11,7 +12,7 @@ export function initTelemetry(env: Record<string,string|undefined> = process.env
   if (!config.enabled) return;
   const budget=volume(env);
   try {
-    Sentry.init({...config,...options,traceLifecycle:'static',beforeSendTransaction:sanitizeEvent,defaultIntegrations:false, integrations:[Sentry.onUncaughtExceptionIntegration(),Sentry.onUnhandledRejectionIntegration()],dataCollection,includeServerName:false,maxBreadcrumbs:20,transportOptions:{bufferSize:30},tracePropagationTargets:[],beforeSend:(event,hint)=>expectedError(hint.originalException)||!budget.event()?null:sanitizeEvent(event),beforeSendSpan:Sentry.withStaticSpan(sanitizeSpan),beforeBreadcrumb:sanitizeBreadcrumb,beforeSendLog:log=>env.SENTRY_LOGS_ENABLED === 'true'&&budget.log()?sanitizeLog(log):null});
+    Sentry.init({...config,...options,enableOpenTelemetrySetup:true,traceLifecycle:'static',beforeSendTransaction:sanitizeEvent,defaultIntegrations:false, integrations:[Sentry.onUncaughtExceptionIntegration(),Sentry.onUnhandledRejectionIntegration()],dataCollection,includeServerName:false,maxBreadcrumbs:20,transportOptions:{bufferSize:30},tracePropagationTargets:[],beforeSend:(event,hint)=>expectedError(hint.originalException)||!budget.event()?null:sanitizeEvent(event),beforeSendSpan:Sentry.withStaticSpan(sanitizeSpan),beforeBreadcrumb:sanitizeBreadcrumb,beforeSendLog:log=>env.SENTRY_LOGS_ENABLED === 'true'&&budget.log()?sanitizeLog(log):null});
     Sentry.setTag('service','api'); initialized = true;
   } catch { /* A malformed/unavailable telemetry configuration never blocks startup. */ }
 }
@@ -43,10 +44,21 @@ export function span<T>(operation: string, fn:()=>Promise<T>): Promise<T> {
   let called=false;
   let result:Promise<T>|undefined;
   const invoke=()=>{called=true;return result=fn();};
-  try {return Sentry.startSpan({name:operation,op:operation,attributes:{operation,service:'api',route:String(Sentry.getIsolationScope().getScopeData().tags.route||'unknown')}},invoke);}
+  // Sentry's registered OTel provider exports through the existing privacy hooks.
+  const safeOperation=String(metadata({operation}).operation||'request');
+  // Preserve the existing SDK-owned request transaction; OTel children share it.
+  if (safeOperation==='request') {
+    try {return Sentry.startSpan({name:'request',op:'request',attributes:{operation:'request',service:'api',route:String(Sentry.getIsolationScope().getScopeData().tags.route||'unknown')}},invoke);}
+    catch(error){if(!called)return fn();if(result)return result;throw error;}
+  }
+  try {return trace.getTracer('patchgoblin.api').startActiveSpan(safeOperation,{attributes:{'sentry.op':safeOperation,operation:safeOperation,service:'api',route:String(Sentry.getIsolationScope().getScopeData().tags.route||'unknown')}},async active=>{
+    try {return await invoke();}
+    catch(error){try {active.setStatus({code:SpanStatusCode.ERROR});} catch {/* best effort */}throw error;}
+    finally {try {active.end();} catch {/* best effort */}}
+  });}
   catch(error){if(!called)return fn();if(result)return result;throw error;}
 }
-export function durableTrace() { try { return traceMetadata(Sentry.getTraceData()); } catch { return {}; } }
+export function durableTrace() { try { return w3cTrace(Sentry.getTraceData()); } catch { return {}; } }
 export async function flushTelemetry() { try { await Sentry.flush(1500); } catch { /* no application impact */ } }
 export function requestScope<T>(request:Request, fn:(requestId:string)=>Promise<T>):Promise<T> {
   const requestId = randomUUID();
@@ -57,7 +69,7 @@ export function requestScope<T>(request:Request, fn:(requestId:string)=>Promise<
    const fresh = new Sentry.Scope();fresh.setClient(Sentry.getClient());
    return Sentry.withIsolationScope(fresh,scope => {
     scope.setTag('service','api');scope.setTag('operation','request');scope.setTag('route',route(request.url));scope.setContext('operation',{request_id:requestId});
-    const trace=traceMetadata({'sentry-trace':request.headers.get('sentry-trace'),baggage:request.headers.get('baggage')});
+    const trace=traceMetadata({'sentry-trace':request.headers.get('sentry-trace'),traceparent:request.headers.get('traceparent'),baggage:request.headers.get('baggage')});
     return Sentry.continueTrace({sentryTrace:trace['sentry-trace'],baggage:trace.baggage},()=>span('request',invoke));
    });
   }catch(error){if(!called)return fn(requestId);if(result)return result;throw error;}

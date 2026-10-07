@@ -1,6 +1,7 @@
 import {span,captureFault} from './telemetry.js';
 import {createHash,randomBytes,createCipheriv,createDecipheriv,createSign,createHmac,timingSafeEqual} from 'node:crypto';
 import {neon} from '@neondatabase/serverless';
+import {limitedText} from './guardrails.js';
 
 export type ProductEnv=Record<string,string|undefined>;
 export type Query=(text:string,params?:any[])=>Promise<any[]>;
@@ -21,13 +22,15 @@ export function repositoryName(value:any){if(typeof value!=='string'||!/^[-\w.]+
 
 export class Product {
  sql:Query;
- constructor(public env:ProductEnv,public fetcher:typeof fetch=fetch,query?:Query){const execute=query||((text:string,params:any[]=[])=>neon(env.DATABASE_URL! ).query(text,params) as Promise<any[]>);this.sql=(text,params)=>span('database',()=>execute(text,params));}
+ deadline=Date.now()+45000;
+ signal(max=20000){const remaining=this.deadline-Date.now();if(remaining<=0)throw new ProductError(503,'Request deadline reached. Retry later.',true);return AbortSignal.timeout(Math.min(max,remaining));}
+ constructor(public env:ProductEnv,public fetcher:typeof fetch=fetch,query?:Query){const execute=query||((text:string,params:any[]=[])=>neon(env.DATABASE_URL!).query(text,params,{fetchOptions:{signal:this.signal(10000)}}) as Promise<any[]>);this.sql=(text,params)=>span('database',()=>execute(text,params));}
  async github(path:string,token:string,method='GET',body?:any){
-  const r=await span('github',()=>this.fetcher('https://api.github.com'+path,{method,headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'PatchGoblin','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(20000)}));
+  const r=await span('github',()=>this.fetcher('https://api.github.com'+path,{method,headers:{Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10','User-Agent':'PatchGoblin','Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:this.signal()}));
   if(!r.ok){if(r.status===429||(r.status===403&&r.headers.get('x-ratelimit-remaining')==='0'))throw new ProductError(429,'GitHub rate limit reached. Retry after '+(r.headers.get('retry-after')||'60')+' seconds.');throw new ProductError(r.status===401?401:r.status===404?404:502,`GitHub request failed (${r.status}). Reconnect or check installation permissions.`);}
-  return r.status===204?null:r.json();
+  return r.status===204?null:JSON.parse(await limitedText(r,2_000_000));
  }
- async oauth(body:Record<string,string>,identity=false){const r=await span('oauth',()=>this.fetcher('https://github.com/login/oauth/access_token',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({client_id:identity?this.env.GITHUB_OAUTH_CLIENT_ID:this.env.GITHUB_CLIENT_ID,client_secret:identity?this.env.GITHUB_OAUTH_CLIENT_SECRET:this.env.GITHUB_CLIENT_SECRET,...body}),signal:AbortSignal.timeout(20000)}));const result=await r.json();if(!r.ok||!result.access_token)throw new ProductError(r.status>=500?502:401,'GitHub authorization expired or was declined. Sign in again.');return result;}
+ async oauth(body:Record<string,string>,identity=false){const r=await span('oauth',()=>this.fetcher('https://github.com/login/oauth/access_token',{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({client_id:identity?this.env.GITHUB_OAUTH_CLIENT_ID:this.env.GITHUB_CLIENT_ID,client_secret:identity?this.env.GITHUB_OAUTH_CLIENT_SECRET:this.env.GITHUB_CLIENT_SECRET,...body}),signal:this.signal()}));const result=JSON.parse(await limitedText(r,10000));if(!r.ok||!result.access_token)throw new ProductError(r.status>=500?502:401,'GitHub authorization expired or was declined. Sign in again.');return result;}
  async session(req:Request){const value=cookies(req)['__Host-pg-session'];if(!value)return null;const rows=await this.sql('SELECT a.*,s.csrf,s.token_hash FROM pg_sessions s JOIN pg_accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now()',[hash(value)]);return rows[0]||null;}
  async userToken(account:any){if(!account.credentials)throw new ProductError(403,'Authorize selected repository access in onboarding.');let auth=decrypt(account.credentials,this.env);if(account.token_expires_at&&new Date(account.token_expires_at).getTime()<Date.now()+60000){if(!auth.refresh_token)throw new ProductError(401,'Authorize repository access again in onboarding.');
   const lease=await this.sql("UPDATE pg_accounts SET refresh_lease_until=now()+interval '30 seconds' WHERE id=$1 AND credentials=$2 AND (refresh_lease_until IS NULL OR refresh_lease_until<now()) RETURNING id",[account.id,account.credentials]);
@@ -44,6 +47,13 @@ export class Product {
   await this.sql('DELETE FROM pg_repository_members WHERE account_id=$1 AND NOT(repo_id=ANY($2::bigint[]))',[account.id,seen]);return this.repositories(account.id);
  }
  async repositories(id:number){return this.sql('SELECT r.*,m.can_push,m.can_admin,i.account_type,i.account_login FROM pg_repository_members m JOIN pg_repositories r ON r.id=m.repo_id JOIN pg_installations i ON i.id=r.installation_id WHERE m.account_id=$1 AND r.active AND i.active ORDER BY r.full_name',[id]);}
+ async visibleRepositories(account:any){
+  if(!account.credentials)return [];
+  const rows=await this.repositories(account.id);if(!rows.length)return rows;
+  const token=await this.userToken(account),visible=[];
+  for(const row of rows){try{const actual=await this.github(`/repos/${row.full_name}`,token);if(Number(row.id)===actual.id)visible.push({...row,can_push:!!actual.permissions?.push,can_admin:!!actual.permissions?.admin});}catch(error){if(!(error instanceof ProductError)||![403,404].includes(error.status))throw error;}}
+  return visible;
+ }
  async authorize(account:any,name:string,write=false,admin=false){repositoryName(name);const row=(await this.sql('SELECT r.*,i.active AS installation_active FROM pg_repositories r JOIN pg_installations i ON i.id=r.installation_id WHERE full_name=$1 AND r.active AND i.active',[name]))[0];if(!row)throw new ProductError(404,'Repository is not installed or access was removed.');const token=await this.userToken(account);const actual=await this.github(`/repos/${name}`,token);if(actual.id!==Number(row.id)||write&&!actual.permissions?.push||admin&&!actual.permissions?.admin)throw new ProductError(403,'Your GitHub permissions do not allow this action.');
   // A user token cannot access a repository outside the App installation intersection.
   const current=await this.github(`/repos/${name}/installation`,appJwt(this.env));if(current.id!==Number(row.installation_id)||current.suspended_at)throw new ProductError(403,'Installation access has changed. Refresh your repositories.');return {row,token:await this.installationToken(Number(row.installation_id),Number(row.id)),actual};

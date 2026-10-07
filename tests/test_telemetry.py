@@ -68,6 +68,16 @@ def test_trace_metadata_is_bounded_and_expected_filter_is_narrow():
     assert not telemetry.expected(ValueError('Unexpected state'))
 
 
+def test_w3c_context_validation_and_conflicting_parents():
+    parent = '00-' + 'a' * 32 + '-' + 'b' * 16 + '-01'
+    assert telemetry.trace_metadata({'traceparent': parent})['sentry-trace'] == 'a' * 32 + '-' + 'b' * 16 + '-1'
+    for value in (parent.replace('00-', 'ff-'), parent + '-secret',
+                  parent.replace('a' * 32, '0' * 32), parent.replace('b' * 16, '0' * 16)):
+        assert telemetry.trace_metadata({'traceparent': value}) == {}
+    assert telemetry.trace_metadata({'traceparent': parent, 'sentry-trace': 'c' * 32 + '-' + 'd' * 16 + '-1'}) == {}
+    assert 'tracestate' not in telemetry.trace_metadata({'traceparent': parent, 'tracestate': SECRET})
+
+
 def test_concurrent_durable_jobs_are_isolated_and_end_all_stages():
     transport = MemoryTransport()
     with sentry_sdk.new_scope():
@@ -77,7 +87,9 @@ def test_concurrent_durable_jobs_are_isolated_and_end_all_stages():
 
         def run(identity):
             parent = identity * 32 + '-' + 'b' * 16 + '-1'
-            with telemetry.work_scope('job', identity, {'sentry-trace': parent}, 'repair'):
+            carrier = ({'traceparent': '00-' + identity * 32 + '-' + 'b' * 16 + '-01'}
+                       if identity == 'a' else {'sentry-trace': parent})
+            with telemetry.work_scope('job', identity, carrier, 'repair'):
                 telemetry.stage('inspect')
                 barrier.wait(timeout=5)
                 trace = telemetry.durable_trace()
@@ -131,13 +143,18 @@ def test_delivery_producer_persists_its_trace_for_a_later_job(monkeypatch):
     saved = {}
 
     class Database:
-        def execute(self, sql, args):
+        def execute(self, sql, args=()):
+            if 'pg_budget_alerts' in sql:
+                return self
             assert 'pg_enqueue' in sql
             saved.update(json.loads(args[3]))
             return self
 
         def fetchone(self):
             return {'id': 1}
+
+        def fetchall(self):
+            return []
 
     @contextmanager
     def connect():

@@ -26,6 +26,8 @@ class PipelineAgent(Agent):
                 "cancelled",
             }:
                 return self.store.previous
+            if self.store.previous and self.store.previous.get('status') not in {'queued', 'inspect'}:
+                raise RuntimeError('Interrupted pipeline job cannot restart under a fresh model budget')
             self.event("inspect", "Comparing repository manifests and declared checks with actual workflow coverage")
             repo = request["repo"]
             metadata = self.github.request("GET", f"/repos/{repo}")
@@ -93,6 +95,7 @@ class PipelineAgent(Agent):
                     "Detected uncovered project checks from manifests, runtime constraints and existing CI commands",
                 )
                 self.model = self.model or Model()
+                self.model.before_inference = getattr(self, 'before_inference', lambda: None)
                 self.model.deadline = self.deadline
                 self.event("investigate", "Asking the model to assess evidence and select the minimal coverage update")
                 decision = self.model.decide(evidence)

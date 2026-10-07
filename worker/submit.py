@@ -2,7 +2,7 @@
 
 import os
 from urllib.parse import quote
-from worker.security import safe_path, redact, LOCK_FILES, PATCH_FILES
+from worker.security import safe_path, redact, public_prose, LOCK_FILES, PATCH_FILES
 
 
 def maintenance_prefix(request):
@@ -121,7 +121,7 @@ def submit(github, job_id, request, state, cancelled=lambda: False):
         blast = "dependencies" if request["mode"] == "repair" else "CI"
         body = f"""## Summary
 
-{state["diagnosis"]}
+{public_prose(state["diagnosis"])}
 
 Changed files: {", ".join(files)}
 
@@ -137,9 +137,9 @@ Changed files: {", ".join(files)}
 **After:** verified in a disposable Railway sandbox at {state["sha"]}.
 {after}
 
-{chr(10).join(state.get("evidence", []))}
+{public_prose(chr(10).join(state.get("evidence", [])), 6000)}
 
-{chr(10).join(state.get("limitations", []))}
+{public_prose(chr(10).join(state.get("limitations", [])))}
 
 Model: {metrics.get("model", "unavailable")} via Groq. Usage: {metrics.get("model_tokens", "unavailable")} tokens. Token list-price estimate: {metrics.get("estimated_cost_usd", "unavailable")} USD; actual charges unavailable.
 

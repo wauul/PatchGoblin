@@ -17,6 +17,8 @@ export default defineRailway(() => {
       "SENTRY_DSN", "SENTRY_ENVIRONMENT", "SENTRY_RELEASE", "SENTRY_ENABLED",
       "SENTRY_ERROR_SAMPLE_RATE", "SENTRY_TRACES_SAMPLE_RATE", "SENTRY_LOGS_ENABLED",
       "SENTRY_LOG_SAMPLE_RATE", "SENTRY_MAX_EVENTS_PER_MINUTE",
+      "PATCHGOBLIN_LANGFUSE_ENABLED", "LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY",
+      "LANGFUSE_BASE_URL", "LANGFUSE_TRACING_ENVIRONMENT",
     ].map(key => [key, preserve()])),
     deploy: {
       healthcheckPath: "/health", healthcheckTimeout: 120,

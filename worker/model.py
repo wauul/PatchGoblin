@@ -1,4 +1,5 @@
-from worker import telemetry
+from worker import telemetry, llmops
+from worker.decision_graph import build_graph, decide
 import json
 import os
 import time
@@ -35,9 +36,24 @@ class Model:
         self.prompt_tokens = self.completion_tokens = 0
         self.calls = 0
         self.usage_available = True
-        self.max_tokens = min(int(os.getenv("MAX_MODEL_TOKENS", "12000")), 20000)
+        self.max_tokens = min(int(os.getenv("MAX_MODEL_TOKENS", "12000")), 12000)
+        self.before_inference = lambda: None  # Public worker supplies a live DB guard.
 
     def decide(self, evidence: dict) -> dict:
+        if not hasattr(self, "graph"):
+            self.graph = build_graph(self)
+        before_input, before_output, before_total = self.prompt_tokens, self.completion_tokens, self.tokens
+        metadata = {"pipeline_version": llmops.PIPELINE_VERSION,
+                    "mode": evidence.get("mode"), "provider": "groq" if self.groq else "compatible"}
+        with llmops.observation(metadata) as update:
+            decision = decide(self.graph, evidence)
+            usage = ({"input": self.prompt_tokens - before_input, "output": self.completion_tokens - before_output,
+                      "total": self.tokens - before_total} if self.usage_available else {})
+            update({"outcome": "success", "action": decision.get("action"),
+                    "prompt_version": self.prompt_version}, usage)
+            return decision
+
+    def _prepare(self, evidence: dict) -> dict:
         budget = self.max_tokens - self.tokens
         if budget < 1800 or self.calls >= 6:
             raise RuntimeError("Model budget exhausted")
@@ -91,6 +107,11 @@ class Model:
             schema["required"]=list(schema["properties"])
             payload["response_format"]={"type":"json_schema","json_schema":{"name":"patchgoblin_decision","strict":True,"schema":schema}}
             payload["messages"][0]["content"] += "\nThe Groq transport schema represents files as an array of {path,content} objects. Return [] for no edits. Follow the transport schema.\n"
+            payload["messages"][0]["content"] += (
+                "Always include ALL required fields, even for unsupported: action, diagnosis, category, paths, "
+                "files, refresh_lock, evidence. Use paths:[], files:[], refresh_lock:false and evidence:[] "
+                "when unused. Never omit these fields.\n"
+            )
             if evidence.get('mode')=='builder':
                 payload['messages'][0]['content'] += '\nThe repository has no CI. Describe the missing workflow you are adding in diagnosis; do not say no changes are required simply because the supplied draft is valid.\n'
             payload["reasoning_effort"]="low"
@@ -108,6 +129,13 @@ class Model:
                 'required':['action','candidate_id','diagnosis','category','evidence'],'additionalProperties':False}
             payload['response_format'] = ({'type':'json_schema','json_schema':{'name':'patchgoblin_pipeline_selection','strict':True,'schema':selection_schema}}
                                          if self.groq else {'type':'json_object','schema':selection_schema})
+        self.prompt_version = llmops.prompt_version(payload["messages"][0]["content"])
+        return {"payload": payload, "budget": budget, "candidate_id": candidate_id,
+                "candidate_files": evidence.get("candidate_files", {})}
+
+    def _infer(self, prepared: dict) -> dict:
+        self.before_inference()
+        payload, budget = prepared["payload"], prepared["budget"]
         timeout = min(480, max(1, getattr(self, "deadline", time.monotonic()+480)-time.monotonic()))
         with httpx.Client(timeout=timeout) as client:
             headers = {"Authorization": "Bearer " + self.key}
@@ -138,6 +166,7 @@ class Model:
             try:
                 inference_start = time.monotonic()
                 with telemetry.span('inference') as inference_span:
+                    self.before_inference()
                     response = client.post(self.base + "/chat/completions", headers=headers, json=payload)
                     telemetry.measured(inference_span, model=self.name, duration_ms=(time.monotonic() - inference_start) * 1000, **{'http.status_code': response.status_code})
             except httpx.RequestError as exc:
@@ -161,12 +190,20 @@ class Model:
         telemetry.log('inference', model=self.name, duration_ms=(time.monotonic() - inference_start) * 1000,
                       status='ok', **({k: usage[k] for k in ('prompt_tokens', 'completion_tokens', 'total_tokens')
                                       if k in usage} if usage else {}))
+        return result
+
+    def _parse(self, prepared: dict, result: dict) -> dict:
+        candidate_id = prepared["candidate_id"]
         content = result["choices"][0]["message"]["content"]
         decision=json.loads(content)
+        if not isinstance(decision, dict) or decision.get("action") not in {
+            "read", "patch", "refresh_lock", "unsupported"
+        }:
+            raise ValueError("Invalid model decision")
         if candidate_id:
             if decision.get('candidate_id') != candidate_id:
                 raise ValueError('Model selected a different pipeline proposal')
-            decision['files'] = dict(evidence['candidate_files']) if decision.get('action') == 'patch' else {}
+            decision['files'] = dict(prepared['candidate_files']) if decision.get('action') == 'patch' else {}
         if self.groq and isinstance(decision.get("files"),list):
             files=decision["files"]
             if len(files)>4 or len({f["path"] for f in files})!=len(files):
@@ -175,6 +212,10 @@ class Model:
         return decision
 
     def metrics(self) -> dict:
+        return {**self._usage_metrics(), "pipeline_version": llmops.PIPELINE_VERSION,
+                "prompt_version": getattr(self, "prompt_version", None)}
+
+    def _usage_metrics(self) -> dict:
         if self.groq:
             return {"model":self.name,"provider":"groq","model_calls":self.calls,
                     "model_tokens":self.tokens if self.usage_available else None,

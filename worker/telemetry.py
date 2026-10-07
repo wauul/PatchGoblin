@@ -27,6 +27,8 @@ _log_sample_rate = .1
 _max_events = 60
 _event_window = 0
 _event_count = 0
+_log_window = 0
+_log_count = 0
 _volume_lock = threading.Lock()
 
 
@@ -66,11 +68,22 @@ def trace_metadata(data):
     if not isinstance(data, dict):
         return {}
     trace = data.get('sentry-trace', '')
+    parent = data.get('traceparent')
+    if parent is not None:
+        if not isinstance(parent, str) or not re.fullmatch(r'00-[a-f0-9]{32}-[a-f0-9]{16}-[a-f0-9]{2}', parent):
+            return {}
+        _, trace_id, span_id, flags = parent.split('-')
+        converted = f'{trace_id}-{span_id}-{int(flags, 16) & 1}'
+        if trace and trace != converted:
+            return {}
+        trace = converted
     if not isinstance(trace, str) or not re.fullmatch(r'[a-f0-9]{32}-[a-f0-9]{16}(?:-[01])?', trace):
         return {}
     if trace.startswith('0' * 32) or trace[33:49] == '0' * 16:
         return {}
     out = {'sentry-trace': trace}
+    if parent:
+        out['traceparent'] = parent
     baggage = data.get('baggage', '')
     if isinstance(baggage, str) and len(baggage) <= 1024:
         allowed = r'sentry-trace_id=[a-f0-9]{32}|sentry-public_key=[a-f0-9]{32}|sentry-org_id=\d{1,20}|sentry-sampled=(?:true|false)|sentry-sample_rate=(?:0(?:\.\d{1,10})?|1(?:\.0{1,10})?)'
@@ -85,7 +98,12 @@ def durable_trace():
         span = sentry_sdk.get_current_span()
         if not span:
             return {}
-        return trace_metadata({'sentry-trace': span.to_traceparent(), 'baggage': span.to_baggage()})
+        clean = trace_metadata({'sentry-trace': span.to_traceparent(), 'baggage': span.to_baggage()})
+        parts = clean.get('sentry-trace', '').split('-')
+        if len(parts) >= 2:
+            flags = '01' if len(parts) == 3 and parts[2] == '1' else '00'
+            clean['traceparent'] = f'00-{parts[0]}-{parts[1]}-{flags}'
+        return clean
     except Exception:
         return {}
 
@@ -144,8 +162,16 @@ def sanitize_event(event, hint=None):
 
 
 def sanitize_log(log, hint=None):
+    global _log_window, _log_count
     if not _logs_enabled or log.get('body') not in OPERATIONS:
         return None
+    with _volume_lock:
+        window = int(time.monotonic() // 60)
+        if window != _log_window:
+            _log_window, _log_count = window, 0
+        _log_count += 1
+        if _log_count > _max_events:
+            return None
     # The hook sees plain values; the SDK serializes OTLP attributes afterward.
     attrs = log.get('attributes', {})
     clean = metadata(attrs)

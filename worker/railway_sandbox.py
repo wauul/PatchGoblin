@@ -15,9 +15,10 @@ from worker.security import safe_path, PATCH_FILES
 
 
 class RailwaySandbox:
-    def __init__(self, root, cancelled, deadline, identity, on_created=lambda _: None):
+    def __init__(self, root, cancelled, deadline, identity, on_created=lambda _: None, before_provision=lambda: None):
         self.root, self.cancelled, self.deadline = root, cancelled, deadline
         self.identity, self.on_created = identity, on_created
+        self.before_provision = before_provision
         self.process = None
         self.output = queue.Queue()
         self.calls = 0
@@ -73,6 +74,7 @@ class RailwaySandbox:
 
     @telemetry.instrument('provision')
     def start(self):
+        self.before_provision()
         bridge = Path(__file__).resolve().parent.parent / "scripts/railway-sandbox-bridge.mjs"
         self.process = subprocess.Popen(
             ["node", str(bridge)],

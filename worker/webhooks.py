@@ -5,6 +5,11 @@ import json
 from worker.app_auth import app_request, InstallationGitHub
 from worker.database import connect
 from worker.security import redact
+from worker.guardrails import require_feature
+
+
+class GuardrailBudgetAlert(RuntimeError):
+    pass
 
 
 def cancel_repository(db, repo_id):
@@ -80,6 +85,8 @@ def enqueue(repo, mode, key, request, delay=0):
                 delay,
             ),
         ).fetchone()
+        for _alert in db.execute('SELECT * FROM pg_budget_alerts()').fetchall():
+            telemetry.capture(GuardrailBudgetAlert('Service budget reached eighty percent.'), 'delivery')
 
 
 def record_remote_ci(repo, installation_id, run):
@@ -133,6 +140,7 @@ def _process(delivery):
     if event in {"installation", "installation_repositories"}:
         reconcile_installation(installation_id)
         return
+    require_feature('webhooks')
     if not delivery["repository_id"] or not installation_id:
         return
     with connect() as db:
@@ -275,7 +283,7 @@ def _process(delivery):
 def drain_deliveries():
     with connect() as db:
         row = db.execute(
-            "UPDATE pg_deliveries SET status='processing',attempts=attempts+1,lease_expires_at=now()+interval '2 minutes' WHERE id=(SELECT id FROM pg_deliveries WHERE (status='pending' OR status='processing' AND lease_expires_at<now()) AND available_at<=now() ORDER BY received_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *"
+            "UPDATE pg_deliveries SET status='processing',attempts=attempts+1,lease_expires_at=now()+interval '2 minutes' WHERE id=(SELECT id FROM pg_deliveries WHERE (status='pending' OR status='processing' AND lease_expires_at<now()) AND available_at<=now() AND (pg_feature_allowed('webhooks') OR event IN ('github_app_authorization','installation','installation_repositories')) ORDER BY CASE WHEN event IN ('github_app_authorization','installation','installation_repositories') THEN 0 ELSE 1 END,received_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *"
         ).fetchone()
     if not row:
         return False
@@ -298,6 +306,6 @@ def _finish_delivery(row):
         with connect() as db:
             db.execute(
                 "UPDATE pg_deliveries SET status=%s,available_at=now()+(%s * interval '1 second'),lease_expires_at=NULL,error=%s WHERE id=%s",
-                ("pending" if row["attempts"] < (45 if busy else 8 if hasattr(exc,'retry_after') else 3) else "failed", delay, redact(str(exc))[:300], row["id"]),
+                ("pending" if 'PG_RATE_LIMIT' not in str(exc) and row["attempts"] < (45 if busy else 8 if hasattr(exc,'retry_after') else 3) else "failed", delay, redact(str(exc))[:300], row["id"]),
             )
     return True

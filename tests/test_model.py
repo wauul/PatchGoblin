@@ -5,6 +5,42 @@ import pytest
 from worker.model import Model
 
 
+@pytest.mark.parametrize('content', ['[]', '{"action":"execute_shell"}'])
+def test_invalid_decisions_rejected_after_accounting(monkeypatch, content):
+    monkeypatch.setenv('GROQ_API_KEY', 'synthetic-provider-key')
+    monkeypatch.setenv('MODEL_BASE_URL', 'https://api.groq.com/openai/v1')
+    original_client = httpx.Client
+    def route(request):
+        return httpx.Response(200, json={
+            'usage': {'total_tokens': 800, 'prompt_tokens': 700, 'completion_tokens': 100},
+            'choices': [{'message': {'content': content}}]})
+    monkeypatch.setattr(httpx, 'Client', lambda **kwargs: original_client(
+        transport=httpx.MockTransport(route), **kwargs))
+    model = Model()
+    with pytest.raises(ValueError, match='Invalid model decision'):
+        model.decide({'mode': 'repair'})
+    assert model.calls == 1
+    assert model.tokens == 800
+    assert len(model.metrics()['prompt_version']) == 16
+
+
+def test_missing_usage_consumes_remaining_budget_through_graph(monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY', 'synthetic-provider-key')
+    monkeypatch.setenv('MODEL_BASE_URL', 'https://api.groq.com/openai/v1')
+    original_client = httpx.Client
+    def route(request):
+        return httpx.Response(200, json={
+            'choices': [{'message': {'content': '{"action":"unsupported"}'}}]})
+    monkeypatch.setattr(httpx, 'Client', lambda **kwargs: original_client(
+        transport=httpx.MockTransport(route), **kwargs))
+    model = Model()
+    assert model.decide({'mode': 'repair'})['action'] == 'unsupported'
+    assert model.metrics()['model_tokens'] is None
+    with pytest.raises(RuntimeError, match='budget exhausted'):
+        model.decide({'mode': 'repair'})
+    assert model.calls == 1
+
+
 def test_prompt_tokens_reduce_generation_budget(monkeypatch):
     monkeypatch.setenv("MODEL_API_KEY", "synthetic-key")
     monkeypatch.setenv("MAX_MODEL_TOKENS", "3000")
@@ -79,6 +115,7 @@ def test_groq_strict_files_transport_and_real_usage_fields(monkeypatch):
         assert schema['strict'] is True
         assert schema['schema']['properties']['files']['type']=='array'
         assert set(schema['schema']['required'])==set(schema['schema']['properties'])
+        assert 'Always include ALL required fields' in payload['messages'][0]['content']
         assert 'synthetic-provider-key' not in payload['messages'][1]['content']
         decision={'action':'patch','files':[{'path':'.github/workflows/patchgoblin.yml','content':'workflow'}]}
         return httpx.Response(200,json={'usage':{'total_tokens':1500,'prompt_tokens':1200,'completion_tokens':300},'choices':[{'message':{'content':json.dumps(decision)}}]})

@@ -10,6 +10,9 @@ import yaml
 from worker.agent import Agent
 from worker.project import inspect, make_workflow
 from worker.sandbox import Sandbox
+from worker.evaluation_gate import failures
+from worker.llmops import PIPELINE_VERSION, flush
+from importlib.metadata import version
 
 SPECS = json.loads(Path("fixtures/specs.json").read_text())
 
@@ -159,8 +162,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--case")
     parser.add_argument("--baseline", action="store_true")
+    parser.add_argument("--gate", action="store_true", help="Fail on any failed acceptance or incorrect repair")
     parser.add_argument("--output", default="docs/evaluation-results.json")
     args = parser.parse_args()
+    if args.case and not any(case["id"] == args.case for case in SPECS):
+        parser.error("Unknown evaluation case")
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     results = []
@@ -187,8 +193,16 @@ def main():
                     before=time.monotonic()
                     row["baseline"]={"outcome":baseline(baseline_root,case),"duration_seconds":round(time.monotonic()-before,2),"model_tokens":0}
             results.append(row)
-            out.write_text(json.dumps({"scope":"Local fixtures in real Docker sandboxes; no remote CI claim", "cases":results},indent=2))
+            out.write_text(json.dumps({"scope":"Local fixtures in real Docker sandboxes; no remote CI claim",
+                                      "pipeline_version": PIPELINE_VERSION,
+                                      "packages": {name: version(name) for name in ("langchain", "langgraph", "langfuse")},
+                                      "cases":results},indent=2))
             print(json.dumps(row), flush=True)
+    flush()
+    if args.gate:
+        issues = failures(results)
+        if issues:
+            raise SystemExit("Evaluation gate failed: " + "; ".join(issues))
 
 
 if __name__ == "__main__":

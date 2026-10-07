@@ -93,6 +93,7 @@ class Agent:
                 else:
                     self.event("reproduce", "Confirming CI is absent and inspecting the existing project checks")
                 self.model = self.model or Model()
+                self.model.before_inference = getattr(self, 'before_inference', lambda: None)
                 self.model.deadline = self.deadline
                 attempts = 0
                 originals = {k:(root / k).read_text() for k in project["files"]}

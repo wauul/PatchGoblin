@@ -43,9 +43,19 @@ export function metadata(input: any): Record<string, any> {
 }
 export function traceMetadata(input: any): Record<string,string> {
   if (!input || typeof input !== 'object') return {};
-  const trace = input['sentry-trace'];
+  let trace = input['sentry-trace'];
+  // Accept only W3C version 00. Never persist tracestate or arbitrary baggage.
+  const parent = input.traceparent;
+  if (parent !== undefined && parent !== null) {
+    if (typeof parent !== 'string' || !/^00-[a-f0-9]{32}-[a-f0-9]{16}-[a-f0-9]{2}$/.test(parent)) return {};
+    const parts = parent.split('-');
+    const converted = `${parts[1]}-${parts[2]}-${parseInt(parts[3],16)&1}`;
+    if (trace && trace !== converted) return {};
+    trace = converted;
+  }
   if (typeof trace !== 'string' || !/^[a-f0-9]{32}-[a-f0-9]{16}(?:-[01])?$/.test(trace) || /^0{32}-|^[a-f0-9]{32}-0{16}/.test(trace)) return {};
   const output: Record<string,string> = {'sentry-trace': trace};
+  if (parent) output.traceparent = parent;
   // Keep only bounded SDK sampling metadata; never copy arbitrary baggage.
   if (typeof input.baggage === 'string' && input.baggage.length <= 1024) {
     const allowed = /^(sentry-trace_id=[a-f0-9]{32}|sentry-public_key=[a-f0-9]{32}|sentry-org_id=\d{1,20}|sentry-sampled=(true|false)|sentry-sample_rate=(0(?:\.\d{1,10})?|1(?:\.0{1,10})?))$/;
@@ -53,6 +63,11 @@ export function traceMetadata(input: any): Record<string,string> {
     if (items.length) output.baggage = items.join(',');
   }
   return output;
+}
+export function w3cTrace(input: any): Record<string,string> {
+  const clean = traceMetadata(input);
+  const parts = clean['sentry-trace']?.split('-');
+  return parts ? {...clean,traceparent:`00-${parts[0]}-${parts[1]}-${parts[2]==='1'?'01':'00'}`} : {};
 }
 function stack(stack: any) {
   if (!stack?.frames) return undefined;

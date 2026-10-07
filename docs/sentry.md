@@ -16,6 +16,10 @@ and explicit orchestration spans. Revisit the API lifecycle before an SDK major
 upgrade; Sentry plans to retire the compatibility lifecycle. Automatic HTTP, database, AI,
 console, and repository-content integrations are disabled.
 
+The API now explicitly enables Sentry's OpenTelemetry tracer provider for manual
+child operations. W3C context is carried through durable jobs and linked to
+optional Langfuse generations; see [OpenTelemetry tracing](opentelemetry.md).
+
 See `.env.example` for every supported variable. Each server sets its own
 `SENTRY_DSN`; frontend builds use `VITE_SENTRY_DSN`, extension builds use
 `SENTRY_EXTENSION_DSN`. An absent/invalid DSN disables telemetry. Development and
