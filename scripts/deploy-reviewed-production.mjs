@@ -20,7 +20,8 @@ assert.ok(project && team, 'Explicit production project and team required');
 async function api(path,method='GET') {
   const response=await fetch('https://api.vercel.com'+path,{method,headers:{Authorization:'Bearer '+process.env.VERCEL_TOKEN},signal:AbortSignal.timeout(60000)});
   assert.ok(response.ok, 'Project-scoped release API failed: '+response.status);
-  return response.status===204?null:await response.json();
+  const body=await response.text();
+  return body?JSON.parse(body):null;
 }
 const deployment=await api('/v13/deployments/'+new URL(url).hostname+'?teamId='+encodeURIComponent(team));
 assert.equal(deployment.projectId,project);assert.equal(deployment.target,'production');assert.equal(deployment.readyState,'READY');
