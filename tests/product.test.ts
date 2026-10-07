@@ -84,3 +84,28 @@ test('identity-only accounts must explicitly authorize repository access',async(
  const product=new Product(env,never as typeof fetch,never);
  await assert.rejects(product.userToken({id:123,credentials:null}),/Authorize selected repository access/);
 });
+test('retention requires bearer secret and rejects spoofable cron headers',async()=>{
+  const statements:string[]=[];let wakes=0;
+  const query=async(sql:string)=>{statements.push(sql);return [];};
+  const fetcher=async(url:any,options:any)=>{if(String(url)==='https://worker.invalid/wake'){wakes++;return new Response(null,{status:202});}throw Error('Unexpected provider call: '+url);};
+  const secretEnv={...env,CRON_SECRET:'retention-secret'};
+  const cronHeaders={'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'0 8 * * *'};
+  const ok=await handleProduct(new Request(env.APP_URL+'/api/retention',{headers:cronHeaders}),secretEnv,fetcher as typeof fetch,query);
+  assert.equal(ok.status,401);assert.deepEqual(statements,[]);assert.equal(wakes,0);
+  const bearer=await handleProduct(new Request(env.APP_URL+'/api/retention',{headers:{authorization:'Bearer retention-secret'}}),secretEnv,fetcher as typeof fetch,query);
+  assert.equal(bearer.status,200);assert.deepEqual(await bearer.json(),{ok:true,budget_alerts:0});
+  assert.ok(statements.some(s=>s.includes('pg_retention()')));assert.equal(wakes,1);
+  for(const headers of [
+    {'user-agent':'vercel-cron/1.0'},
+    {'x-vercel-cron-schedule':'0 8 * * *'},
+    {'user-agent':'vercel-cron/1.0','x-vercel-cron-schedule':'5 * * * *'},
+    {'user-agent':'curl/8.5.0','x-vercel-cron-schedule':'0 8 * * *'},
+    {authorization:'Bearer wrong-secret'},
+    {},
+  ]){
+    const response=await handleProduct(new Request(env.APP_URL+'/api/retention',{headers:headers as Record<string,string>}),secretEnv,never as typeof fetch,query);
+    assert.equal(response.status,401,JSON.stringify(headers));
+  }
+  const unprovisioned=await handleProduct(new Request(env.APP_URL+'/api/retention',{headers:cronHeaders}),env,never as typeof fetch,query);
+  assert.equal(unprovisioned.status,401);
+});

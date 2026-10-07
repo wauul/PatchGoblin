@@ -48,6 +48,7 @@ async function handleProductRequest(req:Request,env:ProductEnv,fetcher:typeof fe
    return json({accepted:true,duplicate:!inserted[0].inserted},202);
   }
   if(path==='/api/retention'){
+   // Vercel sends CRON_SECRET as a bearer token. Caller-controlled cron headers are not credentials.
    if(!env.CRON_SECRET||req.headers.get('authorization')!=='Bearer '+env.CRON_SECRET)throw new ProductError(401,'Unauthorized');
    const checkIn=retentionCheckIn('in_progress');
    try{await span('retention',()=>sql('SELECT pg_retention()'));const alerts=await notifyBudgets();await product.wake();if(checkIn)retentionCheckIn('ok',checkIn);return json({ok:true,budget_alerts:alerts});}
